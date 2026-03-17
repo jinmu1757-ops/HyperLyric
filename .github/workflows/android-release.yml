@@ -16,31 +16,30 @@ jobs:
       - name: 拉取代码 Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0 
 
       - name: 版本检测 Version Check
         id: version-check
         run: |
-          # 从 build.gradle.kts 提取当前版本名和版本代码
           CUR_V_NAME=$(grep "versionName =" app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
           CUR_V_CODE=$(grep "versionCode =" app/build.gradle.kts | sed 's/.*= //')
-          
           echo "当前版本 Current: $CUR_V_NAME ($CUR_V_CODE)"
           
-          git checkout HEAD^ app/build.gradle.kts
-          PREV_V_NAME=$(grep "versionName =" app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
-          PREV_V_CODE=$(grep "versionCode =" app/build.gradle.kts | sed 's/.*= //')
-          
-          git checkout HEAD app/build.gradle.kts
-          
-          echo "前一版本 Previous: $PREV_V_NAME ($PREV_V_CODE)"
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            PREV_CONTENT=$(git show HEAD~1:app/build.gradle.kts)
+            PREV_V_NAME=$(echo "$PREV_CONTENT" | grep "versionName =" | sed 's/.*"\(.*\)".*/\1/')
+            PREV_V_CODE=$(echo "$PREV_CONTENT" | grep "versionCode =" | sed 's/.*= //')
+            echo "前一版本 Previous: $PREV_V_NAME ($PREV_V_CODE)"
+          else
+            echo "没有找到历史版本，视为首次发布。"
+            PREV_V_NAME=""
+            PREV_V_CODE=""
+          fi
           
           if [ "$CUR_V_NAME" != "$PREV_V_NAME" ] || [ "$CUR_V_CODE" != "$PREV_V_CODE" ]; then
-            echo "检测到版本更新 Version changed!"
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "version_name=$CUR_V_NAME" >> $GITHUB_OUTPUT
           else
-            echo "版本未变 Version not changed."
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
@@ -76,6 +75,7 @@ jobs:
           alias: ${{ secrets.ALIAS }}
           keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
+          buildToolsVersion: "34.0.0"
 
       - name: 发布 Release Create Release
         id: create_release
