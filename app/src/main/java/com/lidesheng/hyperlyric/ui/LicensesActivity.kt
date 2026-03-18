@@ -75,8 +75,7 @@ class LicensesActivity : ComponentActivity() {
         val licenses = remember {
             listOf(
                 LicenseItem("miuix", "YuKongA", "https://github.com/Yukonga/MIUIX"),
-                LicenseItem("YukiHookAPI", "HighCapable", "https://github.com/HighCapable/YukiHookAPI"),
-                LicenseItem("KavaRef", "HighCapable", "https://github.com/HighCapable/KavaRef"),
+                LicenseItem("libxposed API", "libxposed", "https://github.com/libxposed/api"),
                 LicenseItem("haze", "chrisbanes", "https://github.com/chrisbanes/haze"),
                 LicenseItem("retrofit", "square", "https://github.com/square/retrofit"),
                 LicenseItem("okhttp", "square", "https://github.com/square/okhttp"),

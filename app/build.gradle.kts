@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.ksp)
+
 }
 
 android {
@@ -14,7 +14,7 @@ android {
         minSdk = 31
         targetSdk = 36
         versionCode = 1921
-        versionName = "4.8.2"
+        versionName = "4.8.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -67,12 +67,8 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.palette.ktx)
 
-    // YukiHookAPI
-    implementation(libs.yukihookapi.api)
-    implementation(libs.kavaref.core)
-    implementation(libs.kavaref.extension)
-    compileOnly(files("libs/api-82.jar"))
-    ksp(libs.yukihookapi.ksp.xposed)
+    // libxposed API
+    compileOnly("io.github.libxposed:api:101.0.0")
 
     // --- 布局兼容 ---
     implementation(libs.androidx.constraintlayout)
@@ -92,7 +88,6 @@ dependencies {
     implementation(libs.miuix.android)
     implementation(libs.miuix.icons.android)
     implementation(libs.haze)
-
 
     // --- 调试工具 ---
     debugImplementation(libs.androidx.compose.ui.tooling)

@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 object ShellUtils {
 
     suspend fun restartSystemUI(): Boolean {
+        // 尝试重启 SystemUI
         return execRootCmdSilent("pkill -9 com.android.systemui || killall -9 com.android.systemui")
     }
 

@@ -1,26 +1,16 @@
 package com.lidesheng.hyperlyric.root
 
-import com.highcapable.yukihookapi.YukiHookAPI
-import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
-import com.highcapable.yukihookapi.hook.xposed.bridge.event.YukiXposedEvent
-import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
-@InjectYukiHookWithXposed(
-    isUsingResourcesHook = true
-)
-object HookEntry : IYukiHookXposedInit {
+class HookEntry : XposedModule() {
 
-    override fun onHook() = YukiHookAPI.encase {
-        loadApp(name = "com.android.systemui") {
-            MainHook.hookSystemUIDynamicIsland()
-        }
-    }
-
-    override fun onXposedEvent() {
-        YukiXposedEvent.events {
-            onHandleInitPackageResources {
-                UnlockIslandWhitelist.init(it)
-            }
+    override fun onPackageLoaded(param: PackageLoadedParam) {
+        val packageName = param.packageName
+        if (packageName == "com.android.systemui" || packageName == "miui.systemui.plugin") {
+            log("[HyperLyric] ★ onPackageLoaded: $packageName")
+            //MainHook.hookSystemUIDynamicIsland(this, param)
+            UnlockIslandWhitelist.hook(this)
         }
     }
 }

@@ -1,35 +1,27 @@
 ﻿package com.lidesheng.hyperlyric.root
 
 import android.annotation.SuppressLint
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.callbacks.XC_InitPackageResources
-import java.lang.reflect.Method
-import kotlin.math.max
+import android.content.res.Resources
+import io.github.libxposed.api.XposedInterface.Chain
+import io.github.libxposed.api.XposedInterface.Hooker
+import io.github.libxposed.api.XposedModule
 
 /**
- * 灵动岛小窗白名单：通过原生 Xposed 的 handleInitPackageResources 替换资源。
- * 仅在 HyperOS 3.0.300 及以上版本生效
- *
- * 注：此功能保留使用原生 Xposed API。
+ * 灵动岛小窗白名单：通过方法 Hook 拦截 Resources.getStringArray() 替换白名单。
+ * 只有当前系统中存在名为 config_dynamic_island_miniwindow_media_whitelist 的资源数组，就会自动启动 Hook。
  */
 object UnlockIslandWhitelist {
-    private const val TARGET_PACKAGE = "miui.systemui.plugin"
     private const val TARGET_RES_NAME = "config_dynamic_island_miniwindow_media_whitelist"
-    private const val TARGET_RES_TYPE = "array"
-    private const val MIN_VERSION = "3.0.300"
 
-    private val VERSION_SPLIT_REGEX = Regex("[^0-9]+")
+    // 缓存目标资源 ID
+    private var targetResId: Int = -1
+    // 用于记录已经通过反射查询过但并不是目标 ID 的集合，避免高频抛出异常导致严重掉帧
+    private val checkedIds = mutableSetOf<Int>()
 
-    private val getSystemPropMethod: Method? by lazy {
-        try {
-            @SuppressLint("PrivateApi")
-            val clazz = Class.forName("android.os.SystemProperties")
-            clazz.getMethod("get", String::class.java, String::class.java)
-        } catch (_: Exception) {
-            null
-        }
-    }
+    // 保存 XposedModule 引用
+    internal lateinit var module: XposedModule
 
+    // 自定义白名单列表
     private val CUSTOM_WHITELIST = arrayOf(
         "tv.danmaku.bili",              // 哔哩哔哩
         "tv.danmaku.bilibilihd",        // 哔哩哔哩HD
@@ -40,7 +32,7 @@ object UnlockIslandWhitelist {
         "com.tencent.qqmusicpad",       // QQ音乐Pad
         "com.kugou.android",            // 酷狗音乐
         "com.kugou.android.lite",       // 酷狗音乐概念版
-        "cn.kuwo.player",               // 酷我音乐
+        "cn.kuwo.player",              // 酷我音乐
         "com.netease.cloudmusic",       // 网易云音乐
         "cmccwm.mobilemusic",           // 咪咕音乐
         "cn.wenyu.bodian",              // 波点音乐
@@ -54,6 +46,7 @@ object UnlockIslandWhitelist {
         "com.xuncorp.qinalt.music",     // 青盐云听
         "com.maxmpz.audioplayer",       // Poweramp
         "yos.music.player",             // Flamingo
+        "com.larus.nova",               // 汽水音乐
         "com.sumsg.musichub",           // Music Hub
         "com.miui.fm",                  // 小米收音机
         "com.xs.fm",                    // 喜马拉雅
@@ -69,52 +62,73 @@ object UnlockIslandWhitelist {
     )
 
     /**
-     * 原生 Xposed 资源 Hook 入口，由 HookEntry.handleInitPackageResources() 调用
+     * 方法 Hook 入口，由 HookEntry.onPackageLoaded() 调用
      */
-    fun init(resparam: XC_InitPackageResources.InitPackageResourcesParam) {
-        if (resparam.packageName != TARGET_PACKAGE) return
+    @SuppressLint("DiscouragedApi")
+    fun hook(xposedModule: XposedModule) {
+        module = xposedModule
 
-        if (!isVersionCompatible()) return
+        // 功能探测：首先尝试在系统资源集中查找目标白名单 ID
+        val resId = try {
+            Resources.getSystem().getIdentifier(TARGET_RES_NAME, "array", "android")
+        } catch (_: Exception) {
+            0
+        }
+
+        if (resId != 0) {
+            targetResId = resId
+            module.log("[HyperLyric] 功能探测：系统已暴露白名单资源 ID: $resId")
+        } else {
+            // 如果系统直接查不到，我们仍启动 Hook，由拦截器尝试在 Package 运行时进行二次动态探测
+            module.log("[HyperLyric] 功能探测：系统底层未直接暴露 ID，进入运行时动态匹配模式。")
+        }
 
         try {
-            val res = resparam.res
-            @Suppress("DiscouragedApi")
-            val resId = res.getIdentifier(TARGET_RES_NAME, TARGET_RES_TYPE, TARGET_PACKAGE)
-
-            if (resId != 0) {
-                res.setReplacement(resId, CUSTOM_WHITELIST)
-                XposedBridge.log("[HyperLyric] 成功替换灵动岛白名单，生效数量: ${CUSTOM_WHITELIST.size}")
-            } else {
-                XposedBridge.log("[HyperLyric] 未找到白名单资源 $TARGET_RES_NAME")
-            }
-        } catch (t: Throwable) {
-            XposedBridge.log("[HyperLyric] Hook资源时发生错误: ${t.message}")
+            val getStringArrayMethod = Resources::class.java.getDeclaredMethod(
+                "getStringArray", Int::class.javaPrimitiveType
+            )
+            module.deoptimize(getStringArrayMethod)
+            module.hook(getStringArrayMethod).intercept(GetStringArrayHooker())
+            module.log("[HyperLyric] 白名单方法 Hook 已注册 (探测模式)")
+        } catch (e: Exception) {
+            module.log("[HyperLyric] [E] 白名单 Hook 注册失败: ${e.message}")
         }
     }
 
-    private fun isVersionCompatible(): Boolean {
-        try {
-            val rawVersion = getSystemPropMethod?.invoke(null, "ro.build.version.incremental", "unknown") as? String ?: "unknown"
+    /**
+     * Hooker: 拦截 Resources.getStringArray(int)，替换白名单资源
+     * 极速判断策略：缓存已知目标 ID，无效 ID 仅检查一次。
+     */
+    class GetStringArrayHooker : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val resId = chain.args[0] as? Int ?: return chain.proceed()
 
-            if (rawVersion.isEmpty() || rawVersion == "unknown") {
-                XposedBridge.log("[HyperLyric] 获取系统版本失败，白名单替换跳过。")
-                return false
+            // 1. 已知目标 ID 情况下的极速相等判断
+            if (targetResId != -1) {
+                if (resId == targetResId) {
+                    return CUSTOM_WHITELIST
+                }
+                return chain.proceed()
             }
 
-            val cleanVersion = rawVersion.dropWhile { !it.isDigit() }
-            val v1 = cleanVersion.split(VERSION_SPLIT_REGEX).filter { it.isNotEmpty() }
-            val v2 = MIN_VERSION.split(VERSION_SPLIT_REGEX).filter { it.isNotEmpty() }
-            val length = max(v1.size, v2.size)
-
-            for (i in 0 until length) {
-                val a = v1.getOrNull(i)?.toIntOrNull() ?: 0
-                val b = v2.getOrNull(i)?.toIntOrNull() ?: 0
-                if (a != b) return a > b
+            // 2. 动态探测流程：记录已检查过的 ID 防止重复高频报错
+            if (!checkedIds.add(resId)) {
+                return chain.proceed()
             }
-            return true
-        } catch (e: Exception) {
-            XposedBridge.log("[HyperLyric] 版本检测异常: ${e.message}")
-            return false
+
+            // 3. 全新的未检查过的 resId，此时通过名字反射进行确认
+            try {
+                val resources = chain.thisObject as? Resources ?: return chain.proceed()
+                val resName = resources.getResourceEntryName(resId)
+                if (resName == TARGET_RES_NAME) {
+                    targetResId = resId
+                    module.log("[HyperLyric] 运行时探测成功，锁定白名单 ID: $resId")
+                    return CUSTOM_WHITELIST
+                }
+            } catch (_: Exception) {
+                // 静默处理无关资源
+            }
+            return chain.proceed()
         }
     }
 }

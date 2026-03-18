@@ -1,5 +1,5 @@
-# 保护入口类不被混淆，否则 LSPosed 找不到入口
 -keep class com.lidesheng.hyperlyric.root.MainHook { *; }
+-keep class com.lidesheng.hyperlyric.root.MainHook$* { *; }
 -keep class com.lidesheng.hyperlyric.root.** { *; }
 -keep class com.lidesheng.hyperlyric.Constants { *; }
 

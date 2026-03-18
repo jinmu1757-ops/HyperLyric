@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.lidesheng.hyperlyric">
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -16,6 +15,7 @@
 
     <application
         android:label="HyperLyric"
+        android:description="@string/app_description"
         android:testOnly="false"
         android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar"
         android:icon="@mipmap/ic_launcher"
@@ -93,22 +93,6 @@
         <activity
             android:name=".ui.LicensesActivity"
             android:exported="false" />
-
-
-<!-- 已取消 Xposed 模块声明，将 app/src/main/assets/xposed_init 重命名为 xposed_init.bak
-        <meta-data
-            android:name="xposedmodule"
-            android:value="true" />
-        <meta-data
-            android:name="xposeddescription"
-            android:value="HyperOS3媒体超级岛增强模块" />
-        <meta-data
-            android:name="xposedminversion"
-            android:value="82" />
-        <meta-data
-            android:name="xposedscope"
-            android:resource="@array/xposed_scope" />
--->
 
     </application>
 

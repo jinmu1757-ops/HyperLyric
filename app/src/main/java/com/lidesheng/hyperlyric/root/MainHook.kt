@@ -1,7 +1,10 @@
 ﻿package com.lidesheng.hyperlyric.root
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Color
 import android.media.MediaMetadata
@@ -19,9 +22,11 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isEmpty
-import com.highcapable.yukihookapi.hook.log.YLog
 import com.lidesheng.hyperlyric.utils.AnimUtils
-import java.io.File
+import io.github.libxposed.api.XposedInterface.Chain
+import io.github.libxposed.api.XposedInterface.Hooker
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 import java.lang.ref.WeakReference
 import java.util.WeakHashMap
 import kotlin.math.abs
@@ -37,16 +42,82 @@ object MainHook {
         private const val RIGHT_EXTRA_OFFSET_PX = 6f
 
         private var cachedConfig: ModuleConfig? = null
-        private var lastFileModifiedTime: Long = 0
-        private val configFile = File("/data/system/hyperlyric.conf")
         private val scrollerMap = WeakHashMap<TextView, MarqueeController>()
         private var mediaTracker: MediaSessionTracker? = null
         private var activeIslandState: ActiveIslandState? = null
-        private var cachedCutoutWidthPortrait: Int = -2
+        private var cachedCutoutWidthPortrait: Int = -2   // -2 = 未初始化
         private var cachedCutoutWidthLandscape: Int = -2
         private val clipDisabledViews = WeakHashMap<View, Boolean>()
         private val layoutFixedContainers = WeakHashMap<ViewGroup, Boolean>()
 
+        private var isReceiverRegistered = false
+        private val configUpdateReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == "com.lidesheng.hyperlyric.UPDATE_SETTINGS") {
+                    val currentConfig = cachedConfig ?: return
+                    val extras = intent.extras ?: return
+
+                    var newSize = currentConfig.size
+                    var newMarquee = currentConfig.marquee
+                    var newHideNotch = currentConfig.hideNotch
+                    var newMaxLeftWidth = currentConfig.maxLeftWidth
+                    var newSpeed = currentConfig.speed
+                    var newDelay = currentConfig.delay
+                    var newAnimMode = currentConfig.animMode
+                    var newWhitelist = currentConfig.whitelist
+
+                    var changed = false
+
+                    for (key in extras.keySet()) {
+                        when (key) {
+                            "key_text_size" -> { newSize = extras.getInt(key); changed = true }
+                            "key_marquee_mode" -> { newMarquee = extras.getBoolean(key); changed = true }
+                            "key_hide_notch" -> { newHideNotch = extras.getBoolean(key); changed = true }
+                            "key_max_left_width" -> { newMaxLeftWidth = extras.getInt(key); changed = true }
+                            "marquee_speed" -> { newSpeed = extras.getInt(key); changed = true }
+                            "marquee_delay" -> { newDelay = extras.getInt(key); changed = true }
+                            "key_anim_mode" -> { newAnimMode = extras.getInt(key); changed = true }
+                            "key_whitelist_packages" -> {
+                                val array = extras.getStringArray(key)
+                                if (array != null) {
+                                    newWhitelist = array.toSet()
+                                    changed = true
+                                }
+                            }
+                        }
+                    }
+
+                    if (changed) {
+                        cachedConfig = ModuleConfig(
+                            size = newSize,
+                            marquee = newMarquee,
+                            hideNotch = newHideNotch,
+                            maxLeftWidth = newMaxLeftWidth,
+                            speed = newSpeed,
+                            delay = newDelay,
+                            animMode = newAnimMode,
+                            whitelist = newWhitelist
+                        )
+                        module.log("[HyperLyric] Config updated from broadcast!")
+
+                        // Force update if lyric is showing
+                        val state = activeIslandState ?: return
+                        if (state.isAlive()) {
+                            val tvLeft = state.tvLeft.get() ?: return
+                            val tvRight = state.tvRight.get() ?: return
+                            val bigIslandView = state.bigIslandView.get() ?: return
+                            val title = tvLeft.contentDescription?.toString() ?: ""
+                            applyLyricContent(tvLeft, tvRight, title, cachedConfig!!, context, bigIslandView)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 保存 XposedModule 引用，供 Hooker 类使用
+        internal lateinit var module: XposedModule
+
+        // 灵动岛活跃 View 的弱引用，用于实时推送歌词更新
         private data class ActiveIslandState(
             val tvLeft: WeakReference<TextView>,
             val tvRight: WeakReference<TextView>,
@@ -68,81 +139,221 @@ object MainHook {
             val whitelist: Set<String> = emptySet()
         )
 
-    fun hookSystemUIDynamicIsland() {
-            YLog.debug(msg = "[HyperLyric] ★ hookSystemUIDynamicIsland start")
+        // 记录初始化标记的全局字段名
+        private const val FIELD_HOOKED_FACTORY = "HOOKED_FACTORY_HYPERLYRIC"
+
+        fun hookSystemUIDynamicIsland(xposedModule: XposedModule, param: PackageLoadedParam) {
+            module = xposedModule
+            module.log("[HyperLyric] ★ hookSystemUIDynamicIsland start")
 
             try {
-                de.robv.android.xposed.XposedHelpers.findAndHookMethod(
-                    ClassLoader::class.java,
-                    "loadClass",
-                    String::class.java,
-                    object : de.robv.android.xposed.XC_MethodHook() {
-                        override fun afterHookedMethod(param: MethodHookParam) {
-                            try {
-                                val cls = param.result as? Class<*> ?: return
-                                if (cls.name != "miui.systemui.dynamicisland.template.IslandTemplateFactory") return
+                // 1. 尝试直接加载（如果类在 base classloader 中，这一步就成功了）
+                try {
+                    val factoryClass = param.defaultClassLoader.loadClass("miui.systemui.dynamicisland.template.IslandTemplateFactory")
+                    doHookFactory(factoryClass)
+                } catch (_: ClassNotFoundException) {
+                    module.log("[HyperLyric] 目标类尚未加载，将注册 ClassLoader 构造函数 hook 等待动态加载插件")
+                    // 2. 对于动态加载的插件类，绝对不能 Hook findClass 或 loadClass（高频造成死机）。
+                    // 我们改为 Hook 各种 DexClassLoader 的构造函数。这个动作极少发生（仅加载插件时执行）。
+                    val classLoadersToHook = arrayOf(
+                        "dalvik.system.BaseDexClassLoader",
+                        "dalvik.system.PathClassLoader",
+                        "dalvik.system.DexClassLoader",
+                        "dalvik.system.DelegateLastClassLoader"
+                    )
 
-                                val hookedField = try {
-                                    cls.classLoader?.javaClass?.getDeclaredField("HOOKED_FACTORY")
-                                        ?.apply { isAccessible = true }
-                                } catch (_: NoSuchFieldException) {
-                                    null
-                                }
-
-                                if (hookedField != null && hookedField.get(cls.classLoader) == true) return
-                                hookedField?.set(cls.classLoader, true)
-
-                                hookFactoryMethodDynamic(cls)
-                            } catch (e: Exception) {
-                                YLog.error(msg = "[HyperLyric] loadClass hook 异常: ${e.message}")
+                    for (clName in classLoadersToHook) {
+                        try {
+                            val clazz = Class.forName(clName)
+                            for (c in clazz.declaredConstructors) {
+                                module.deoptimize(c)
+                                module.hook(c).intercept(DexClassLoaderHooker())
                             }
-                        }
+                        } catch (_: Exception) {}
                     }
-                )
+                }
             } catch (e: Exception) {
-                YLog.error(msg = "[HyperLyric] [E] Module injection failed: ${e.message}")
+                module.log("[HyperLyric] [E] Module injection failed: ${e.message}")
             }
         }
 
-        private fun getSmartConfig(): ModuleConfig {
-            if (!configFile.exists() || !configFile.canRead()) {
-                return cachedConfig ?: ModuleConfig().also { cachedConfig = it }
-            }
-
-            val currentModified = configFile.lastModified()
-            if (cachedConfig != null && currentModified == lastFileModifiedTime) return cachedConfig!!
-
-            return try {
-                val content = configFile.readText().trim()
-                parseConfig(content).also {
-                    cachedConfig = it
-                    lastFileModifiedTime = currentModified
+        @Synchronized
+        private fun doHookFactory(factoryClass: Class<*>) {
+            try {
+                // 防止多次注入
+                val hookedField = try {
+                    factoryClass.classLoader?.javaClass?.getDeclaredField(FIELD_HOOKED_FACTORY)
+                        ?.apply { isAccessible = true }
+                } catch (_: NoSuchFieldException) {
+                    null
                 }
+
+                if (hookedField != null && hookedField.get(factoryClass.classLoader) == true) {
+                    return
+                }
+                hookedField?.set(factoryClass.classLoader, true)
+
+                hookFactoryMethodDynamic(factoryClass)
+                module.log("[HyperLyric] IslandTemplateFactory hook 完成")
             } catch (e: Exception) {
-                YLog.error(msg = "[HyperLyric] [E] 配置文件解析失败: ${e.message}")
+                module.log("[HyperLyric] [E] doHookFactory 异常: ${e.message}")
+            }
+        }
+
+        /**
+         * Hooker: 拦截 DexClassLoader 的构造函数，初始化完毕后去寻找我们的目标工厂类
+         */
+        class DexClassLoaderHooker : Hooker {
+            override fun intercept(chain: Chain): Any? {
+                val result = chain.proceed()
+                try {
+                    val cl = chain.thisObject as? ClassLoader ?: return result
+                    val factoryClass = cl.loadClass("miui.systemui.dynamicisland.template.IslandTemplateFactory")
+                    doHookFactory(factoryClass)
+                } catch (_: ClassNotFoundException) {
+                    // 该类加载器里没有，忽略
+                } catch (_: Exception) {}
+                return result
+            }
+        }
+
+
+        /**
+         * Hooker: 拦截 createBigIslandTemplateView，注入歌词 View
+         */
+        class CreateBigIslandHooker : Hooker {
+            @SuppressLint("DiscouragedApi")
+            override fun intercept(chain: Chain): Any? {
+                val result = chain.proceed()
+                try {
+                    // 跳过协程恢复调用（suspend 函数恢复时参数全为 null）
+                    if (chain.args.getOrNull(0) == null) return result
+                    // 跳过 fake 视图（arg[4]=true，用于动画过渡，不需要注入歌词）
+                    if (chain.args.getOrNull(4) == true) return result
+                    val bigIslandView = result as? ViewGroup ?: return result
+                        val context = bigIslandView.context
+                        val config = getSmartConfig()
+
+                        if (!isReceiverRegistered) {
+                            try {
+                                val filter = IntentFilter("com.lidesheng.hyperlyric.UPDATE_SETTINGS")
+                                context.registerReceiver(configUpdateReceiver, filter, Context.RECEIVER_EXPORTED)
+                                isReceiverRegistered = true
+                                module.log("[HyperLyric] Settings broadcast receiver registered in SystemUI")
+                            } catch (e: Exception) {
+                                module.log("[HyperLyric] [E] Failed to register receiver: ${e.message}")
+                            }
+                        }
+
+                        if (mediaTracker == null) {
+                            mediaTracker = MediaSessionTracker(context).apply {
+                                onTitleChanged =
+                                    { pkg, title -> onMediaTitleChanged(pkg, title) }
+                            }
+                        }
+
+                        val extraInfo = chain.args.getOrNull(2)
+                        val pkgName = extraInfo?.let { info ->
+                            try {
+                                val bundle = info.javaClass.getMethod("getExtras")
+                                    .invoke(info) as? Bundle
+                                bundle?.getString("miui.pkg.name")
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+
+                        if (pkgName == null) return result
+                        if (pkgName !in config.whitelist) return result
+
+                        val songTitle = mediaTracker?.getSongTitle(pkgName) ?: ""
+                        if (songTitle.isEmpty()) return result
+                        if (bigIslandView.isEmpty()) return result
+
+                        val mainRowContainer = bigIslandView.getChildAt(0) as? ViewGroup
+                        if (mainRowContainer == null) {
+                            module.log("[HyperLyric] [E] bigIslandView 子视图结构异常，无法获取 mainRowContainer")
+                            return result
+                        }
+
+                        // 针对根节点进行清空权重和宽度的重置
+                        fixContainerForWrapContent(bigIslandView)
+                        fixContainerForWrapContent(mainRowContainer)
+
+                        if (mainRowContainer.isEmpty()) return result
+                        val realAlbumContainer = mainRowContainer.getChildAt(0) as? ViewGroup
+                        val areaCutout = bigIslandView.getChildAt(1) as? ViewGroup
+
+                        if (realAlbumContainer != null) fixContainerForWrapContent(realAlbumContainer)
+                        if (areaCutout != null) fixContainerForWrapContent(areaCutout)
+
+                        if (realAlbumContainer == null || areaCutout == null) {
+                            module.log("[HyperLyric] [E] 视图结构不完整: realAlbumContainer=${realAlbumContainer != null}, areaCutout=${areaCutout != null}")
+                            return result
+                        }
+
+                        val (tvLeft, tvRight, isNewView) = ensureTextViews(
+                            context, config, realAlbumContainer, areaCutout
+                        )
+
+                        if (isNewView) {
+                            setupLayoutListeners(
+                                tvLeft,
+                                tvRight,
+                                bigIslandView,
+                                mainRowContainer,
+                                realAlbumContainer,
+                                areaCutout
+                            )
+                        }
+
+                        activeIslandState = ActiveIslandState(
+                            WeakReference(tvLeft), WeakReference(tvRight),
+                            WeakReference(bigIslandView), pkgName
+                        )
+
+                        if (tvLeft.contentDescription == songTitle) return result
+                        tvLeft.contentDescription = songTitle
+                        applyLyricContent(
+                            tvLeft,
+                            tvRight,
+                            songTitle,
+                            config,
+                            context,
+                            bigIslandView
+                        )
+                    } catch (e: Exception) {
+                        module.log("[HyperLyric] [E] createBigIslandTemplateView hook 异常: ${e.message}")
+                    }
+                return result
+            }
+        }
+
+        // 读取由 UI 界面通过普通 SharedPreferences 保存的远程配置文件
+        @SuppressLint("WorldReadableFiles")
+        internal fun getSmartConfig(): ModuleConfig {
+            cachedConfig?.let { return it }
+            return try {
+                // 使用 libxposed API 从宿主 Module (本 App) 获取共享配置，抛弃 Root
+                val prefs = module.getRemotePreferences("com.lidesheng.hyperlyric_preferences")
+
+                ModuleConfig(
+                    size = prefs.getInt("key_text_size", 13),
+                    marquee = prefs.getBoolean("key_marquee_mode", true),
+                    hideNotch = prefs.getBoolean("key_hide_notch", false),
+                    maxLeftWidth = prefs.getInt("key_max_left_width", 240),
+                    speed = prefs.getInt("marquee_speed", 100),
+                    delay = prefs.getInt("marquee_delay", 1500),
+                    animMode = prefs.getInt("key_anim_mode", 0),
+                    whitelist = prefs.getStringSet("key_whitelist_packages", emptySet()) ?: emptySet()
+                ).also { cachedConfig = it }
+            } catch (e: Exception) {
+                module.log("[HyperLyric] [E] RemotePref 解析失败: ${e.message}")
                 cachedConfig ?: ModuleConfig()
             }
         }
 
-        private fun parseConfig(content: String): ModuleConfig {
-            val map = content.split(";")
-                .mapNotNull { it.split("=", limit = 2).takeIf { kv -> kv.size == 2 } }
-                .associate { (k, v) -> k.trim() to v.trim() }
-
-            return ModuleConfig(
-                size = map["size"]?.toIntOrNull() ?: 13,
-                marquee = map["marquee"] == "true",
-                hideNotch = map["hideNotch"] == "true",
-                maxLeftWidth = map["maxLeftWidth"]?.toIntOrNull() ?: 240,
-                speed = map["speed"]?.toIntOrNull() ?: 100,
-                delay = map["delay"]?.toIntOrNull() ?: 1500,
-                animMode = map["animMode"]?.toIntOrNull() ?: 0,
-                whitelist = map["whitelist"]
-                    ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
-                    ?: emptySet()
-            )
-        }
-
+        // 获取屏幕中央挖孔的宽度（px），按屏幕方向分别缓存
         private fun getNaturalCutoutWidth(view: View): Int {
             val landscape = isLandscape(view.context)
             val cached = if (landscape) cachedCutoutWidthLandscape else cachedCutoutWidthPortrait
@@ -190,10 +401,13 @@ object MainHook {
 
                 if (newTitle.isEmpty() || tvLeft.contentDescription == newTitle) return
 
-                tvLeft.contentDescription = newTitle
-                applyLyricContent(tvLeft, tvRight, newTitle, config, tvLeft.context, bigIslandView)
+                // 强制在主线程更新，避免 API 101 的事件回调不在主 UI 线程时导致的失效
+                tvLeft.post {
+                    tvLeft.contentDescription = newTitle
+                    applyLyricContent(tvLeft, tvRight, newTitle, config, tvLeft.context, bigIslandView)
+                }
             } catch (e: Exception) {
-                YLog.error(msg = "[HyperLyric] onMediaTitleChanged 异常: ${e.message}")
+                module.log("[HyperLyric] onMediaTitleChanged 异常: ${e.message}")
             }
         }
 
@@ -209,114 +423,39 @@ object MainHook {
             val targetMethod = methods.firstOrNull { it.name == "createBigIslandTemplateView" }
 
             if (targetMethod == null) {
-                YLog.error(msg = "[HyperLyric] [E] 未找到 createBigIslandTemplateView 方法，可能系统版本不兼容")
-                YLog.warn(msg = "[HyperLyric] 当前工厂类可用方法: ${methods.joinToString { it.name }}")
+                module.log("[HyperLyric] [E] 未找到 createBigIslandTemplateView 方法，可能系统版本不兼容")
+                module.log("[HyperLyric] 当前工厂类可用方法: ${methods.joinToString { it.name }}")
                 return
             }
 
-            de.robv.android.xposed.XposedBridge.hookMethod(
-                targetMethod,
-                object : de.robv.android.xposed.XC_MethodHook() {
-                    @SuppressLint("DiscouragedApi")
-                    override fun afterHookedMethod(param: MethodHookParam) {
-                        try {
-                            if (param.args.getOrNull(0) == null) return
-                            if (param.args.getOrNull(4) == true) return
-                            val bigIslandView = param.result as? ViewGroup ?: return
-                            val context = bigIslandView.context
-                            val config = getSmartConfig()
-
-                            if (mediaTracker == null) {
-                                mediaTracker = MediaSessionTracker(context).apply {
-                                    onTitleChanged =
-                                        { pkg, title -> onMediaTitleChanged(pkg, title) }
-                                }
-                            }
-
-                            val extraInfo = param.args.getOrNull(2)
-                            val pkgName = extraInfo?.let { info ->
-                                try {
-                                    val bundle = info.javaClass.getMethod("getExtras")
-                                        .invoke(info) as? Bundle
-                                    bundle?.getString("miui.pkg.name")
-                                } catch (_: Exception) {
-                                    null
-                                }
-                            }
-
-                            if (pkgName == null) return
-                            if (pkgName !in config.whitelist) return
-
-                            val songTitle = mediaTracker?.getSongTitle(pkgName) ?: ""
-                            if (songTitle.isEmpty()) return
-                            if (bigIslandView.isEmpty()) return
-
-                            val mainRowContainer = bigIslandView.getChildAt(0) as? ViewGroup
-                            if (mainRowContainer == null) {
-                                YLog.error(msg = "[HyperLyric] [E] bigIslandView 子视图结构异常，无法获取 mainRowContainer")
-                                return
-                            }
-                            fixLinearLayoutForWrapContent(mainRowContainer)
-
-                            if (mainRowContainer.isEmpty()) return
-                            val realAlbumContainer = mainRowContainer.getChildAt(0) as? ViewGroup
-                            val areaCutout = bigIslandView.getChildAt(1) as? ViewGroup
-                            if (realAlbumContainer == null || areaCutout == null) {
-                                YLog.error(msg = "[HyperLyric] [E] 视图结构不完整: realAlbumContainer=${realAlbumContainer != null}, areaCutout=${areaCutout != null}")
-                                return
-                            }
-
-                            val (tvLeft, tvRight, isNewView) = ensureTextViews(
-                                context, config, realAlbumContainer, areaCutout
-                            )
-
-                            if (isNewView) {
-                                setupLayoutListeners(
-                                    tvLeft,
-                                    tvRight,
-                                    bigIslandView,
-                                    mainRowContainer,
-                                    realAlbumContainer,
-                                    areaCutout
-                                )
-                            }
-
-                            activeIslandState = ActiveIslandState(
-                                WeakReference(tvLeft), WeakReference(tvRight),
-                                WeakReference(bigIslandView), pkgName
-                            )
-
-                            if (tvLeft.contentDescription == songTitle) return
-                            tvLeft.contentDescription = songTitle
-                            applyLyricContent(
-                                tvLeft,
-                                tvRight,
-                                songTitle,
-                                config,
-                                context,
-                                bigIslandView
-                            )
-                        } catch (e: Exception) {
-                            YLog.error(msg = "[HyperLyric] [E] createBigIslandTemplateView hook 异常: ${e.message}")
-                        }
-                    }
-                }
-            )
+            module.deoptimize(targetMethod)
+            module.hook(targetMethod).intercept(CreateBigIslandHooker())
         }
 
-        private fun fixLinearLayoutForWrapContent(container: ViewGroup) {
-            if (container !is LinearLayout) return
+        private fun fixContainerForWrapContent(container: ViewGroup) {
             if (layoutFixedContainers[container] == true) return
-            if (container.gravity != (Gravity.START or Gravity.CENTER_VERTICAL)) {
-                container.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+
+            if (container is LinearLayout) {
+                if (container.gravity != (Gravity.START or Gravity.CENTER_VERTICAL)) {
+                    container.gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                }
             }
             for (i in 0 until container.childCount) {
-                val lp =
-                    container.getChildAt(i).layoutParams as? LinearLayout.LayoutParams ?: continue
-                if (lp.weight > 0 || lp.width == 0) {
-                    lp.weight = 0f
-                    lp.width = ViewGroup.LayoutParams.WRAP_CONTENT
-                    container.getChildAt(i).layoutParams = lp
+                val child = container.getChildAt(i)
+                val lp = child.layoutParams
+                if (lp != null) {
+                    var changed = false
+                    if (lp is LinearLayout.LayoutParams && lp.weight > 0) {
+                        lp.weight = 0f
+                        changed = true
+                    }
+                    if (lp.width != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                        lp.width = ViewGroup.LayoutParams.WRAP_CONTENT
+                        changed = true
+                    }
+                    if (changed) {
+                        child.layoutParams = lp
+                    }
                 }
             }
             layoutFixedContainers[container] = true
@@ -329,11 +468,11 @@ object MainHook {
             leftContainer: ViewGroup, rightContainer: ViewGroup
         ): TextViewPair {
             var isNew = false
-            val tvLeft = leftContainer.findViewWithTag<TextView>(LEFT_VIEW_TAG)
+            val tvLeft = leftContainer.findViewWithTag(LEFT_VIEW_TAG)
                 ?: createBaseTextView(context, LEFT_VIEW_TAG, config.size).also {
                     leftContainer.addView(it); isNew = true
                 }
-            val tvRight = rightContainer.findViewWithTag<TextView>(RIGHT_VIEW_TAG)
+            val tvRight = rightContainer.findViewWithTag(RIGHT_VIEW_TAG)
                 ?: createBaseTextView(context, RIGHT_VIEW_TAG, config.size).also {
                     rightContainer.addView(it); isNew = true
                 }
@@ -365,7 +504,7 @@ object MainHook {
                     }
                     leftView.translationY = 0f
                 } catch (e: Exception) {
-                    YLog.error(msg = "[HyperLyric] tvLeft layout 异常: ${e.message}")
+                    module.log("[HyperLyric] tvLeft layout 异常: ${e.message}")
                 }
             }
 
@@ -374,7 +513,7 @@ object MainHook {
                     v.translationX = calcDynamicOffset(v) + RIGHT_EXTRA_OFFSET_PX
                     v.translationY = 0f
                 } catch (e: Exception) {
-                    YLog.error(msg = "[HyperLyric] tvRight layout 异常: ${e.message}")
+                    module.log("[HyperLyric] tvRight layout 异常: ${e.message}")
                 }
             }
         }
@@ -401,7 +540,7 @@ object MainHook {
                     it.rightMargin = 0
                     tvLeft.layoutParams = it
                 }
-                disableClipOnParents(tvLeft, bigIslandView.parent as View)
+                disableClipOnParents(tvLeft, bigIslandView.parent as? View)
 
                 when {
                     config.hideNotch -> applyHideNotchMode(
@@ -436,7 +575,56 @@ object MainHook {
                     )
                 }
             } catch (e: Exception) {
-                YLog.error(msg = "[HyperLyric] applyLyricContent 异常: ${e.message}")
+                module.log("[HyperLyric] applyLyricContent 异常: ${e.message}")
+            }
+        }
+
+        // 向上层遍历 SystemUI 的根容器，寻找诸如刷新位置/测量/重绘弹簧边界等内置的方法来破解它的宽度缓存不变问题。
+        private fun notifyIslandBoundsUpdate(view: View) {
+            view.post {
+                var current: View? = view
+                var rootParent: View? = null
+
+                // 向上寻找灵动岛相关的控制 ViewGroup
+                while (current != null) {
+                    current.requestLayout()
+
+                    val className = current.javaClass.name.lowercase()
+                    if (className.contains("systemui") || className.contains("dynamicisland")) {
+                        rootParent = current
+                    }
+                    if (current.parent is View) {
+                        current = current.parent as View
+                    } else {
+                        break
+                    }
+                }
+
+                // 针对捕捉到的可能是 Island 的顶层 ViewGroup 施加魔法
+                rootParent?.let { target ->
+                    target.requestLayout()
+                    target.invalidate()
+                    target.forceLayout()
+                    try {
+                        // 常见的方法名探索调用，一旦有一条命中就可能打断弹簧缓存
+                        val methodsToTry = arrayOf(
+                            "updateWindowBounds",
+                            "updateLayout",
+                            "updateBounds",
+                            "refreshLayout",
+                            "animateBounds"
+                        )
+                        for (methodName in methodsToTry) {
+                            try {
+                                val method = target.javaClass.getDeclaredMethod(methodName)
+                                method.isAccessible = true
+                                method.invoke(target)
+                            } catch (_: Exception) {}
+                        }
+                    } catch (e: Exception) {
+                        module.log("[HyperLyric] 刷新弹簧边界异常: ${e.message}")
+                    }
+                }
             }
         }
 
@@ -692,37 +880,13 @@ object MainHook {
         private class MediaSessionTracker(context: Context) {
             private val manager =
                 context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
-            private var currentController: MediaController? = null
+
+            // 记录所有活跃的控制器及其对应的独立回调
+            private val trackedControllers = mutableMapOf<MediaController, MediaController.Callback>()
 
             private val cachedTitles = mutableMapOf<String, String>()
 
             var onTitleChanged: ((String, String) -> Unit)? = null
-
-            private val mediaCallback = object : MediaController.Callback() {
-                override fun onMetadataChanged(metadata: MediaMetadata?) {
-                    try {
-                        updateCachedTitle(currentController)
-                    } catch (e: Exception) {
-                        YLog.error(msg = "[HyperLyric] onMetadataChanged 异常: ${e.message}")
-                    }
-                }
-
-                override fun onPlaybackStateChanged(state: PlaybackState?) {
-                    try {
-                        updateCachedTitle(currentController)
-                    } catch (e: Exception) {
-                        YLog.error(msg = "[HyperLyric] onPlaybackStateChanged 异常: ${e.message}")
-                    }
-                }
-
-                override fun onSessionDestroyed() {
-                    try {
-                        refreshActiveSessions()
-                    } catch (e: Exception) {
-                        YLog.error(msg = "[HyperLyric] onSessionDestroyed 异常: ${e.message}")
-                    }
-                }
-            }
 
             init {
                 try {
@@ -732,7 +896,7 @@ object MainHook {
                     )
                     refreshActiveSessions()
                 } catch (e: Exception) {
-                    YLog.error(msg = "[HyperLyric] [E] MediaSessionTracker init 异常: ${e.message}，媒体监听失败")
+                    module.log("[HyperLyric] [E] MediaSessionTracker init 异常: ${e.message}，媒体监听失败")
                 }
             }
 
@@ -740,29 +904,64 @@ object MainHook {
                 try {
                     onActiveSessionsChanged(manager.getActiveSessions(null))
                 } catch (e: Exception) {
-                    YLog.warn(msg = "[HyperLyric] [W] 刷新媒体会话失败: ${e.message}")
+                    module.log("[HyperLyric] [W] 刷新媒体会话失败: ${e.message}")
+                }
+            }
+
+            // 为每个活跃的 Controller 创建专属回调
+            private fun createCallback(controller: MediaController): MediaController.Callback {
+                return object : MediaController.Callback() {
+                    override fun onMetadataChanged(metadata: MediaMetadata?) {
+                        try {
+                            updateCachedTitle(controller)
+                        } catch (e: Exception) {
+                            module.log("[HyperLyric] onMetadataChanged 异常: ${e.message}")
+                        }
+                    }
+
+                    override fun onPlaybackStateChanged(state: PlaybackState?) {
+                        try {
+                            updateCachedTitle(controller)
+                        } catch (e: Exception) {
+                            module.log("[HyperLyric] onPlaybackStateChanged 异常: ${e.message}")
+                        }
+                    }
+
+                    override fun onSessionDestroyed() {
+                        try {
+                            refreshActiveSessions()
+                        } catch (e: Exception) {
+                            module.log("[HyperLyric] onSessionDestroyed 异常: ${e.message}")
+                        }
+                    }
                 }
             }
 
             private fun onActiveSessionsChanged(controllers: List<MediaController>?) {
-                if (controllers.isNullOrEmpty()) return
-                val target = controllers.find {
-                    it.playbackState?.state == PlaybackState.STATE_PLAYING
-                } ?: controllers.find {
-                    it.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) != null
-                } ?: controllers.first()
+                if (controllers == null) return
 
-                if (currentController?.packageName != target.packageName) {
+                val currentSessions = controllers.toSet()
+
+                // 移除已经无效的追踪器
+                val toRemove = trackedControllers.keys.filter { it !in currentSessions }
+                for (deadController in toRemove) {
                     try {
-                        currentController?.unregisterCallback(mediaCallback)
-                    } catch (_: Exception) {
+                        val callback = trackedControllers.remove(deadController)
+                        if (callback != null) deadController.unregisterCallback(callback)
+                    } catch (_: Exception) {}
+                }
+
+                // 注册尚未追踪的存活控制器
+                for (activeController in currentSessions) {
+                    if (!trackedControllers.containsKey(activeController)) {
+                        try {
+                            val newCallback = createCallback(activeController)
+                            activeController.registerCallback(newCallback)
+                            trackedControllers[activeController] = newCallback
+                            // 初始抓取一次歌名
+                            updateCachedTitle(activeController)
+                        } catch (_: Exception) {}
                     }
-                    currentController = target
-                    try {
-                        target.registerCallback(mediaCallback)
-                    } catch (_: Exception) {
-                    }
-                    updateCachedTitle(target)
                 }
             }
 
@@ -774,7 +973,7 @@ object MainHook {
                 val oldTitle = cachedTitles[pkg]
                 cachedTitles[pkg] = newTitle
 
-                if (oldTitle != newTitle) {
+                if (oldTitle != newTitle && newTitle.isNotEmpty()) {
                     onTitleChanged?.invoke(pkg, newTitle)
                 }
             }
@@ -782,9 +981,13 @@ object MainHook {
             fun getSongTitle(targetPkg: String): String {
                 cachedTitles[targetPkg]?.let { if (it.isNotEmpty()) return it }
                 return try {
-                    manager.getActiveSessions(null)
-                        .firstOrNull { it.packageName == targetPkg }
-                        ?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                    val sessions = manager.getActiveSessions(null)
+                    // 优先找正在播放状态的指定包名，没有的话就找同包名的第一个
+                    val targetSession = sessions.firstOrNull {
+                        it.packageName == targetPkg && it.playbackState?.state == PlaybackState.STATE_PLAYING
+                    } ?: sessions.firstOrNull { it.packageName == targetPkg }
+
+                    targetSession?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
                         ?.substringBefore("\n")
                         ?.also { if (it.isNotEmpty()) cachedTitles[targetPkg] = it }
                         ?: ""
