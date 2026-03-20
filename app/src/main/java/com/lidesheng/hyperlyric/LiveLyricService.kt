@@ -43,7 +43,7 @@ import androidx.core.graphics.toColorInt
 
 class LiveLyricService : NotificationListenerService() {
     private lateinit var mediaSessionManager: MediaSessionManager
-    private var currentController: MediaController? = null
+    private val currentControllers = mutableListOf<MediaController>()
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var lastUpdateTime = 0L
@@ -124,28 +124,44 @@ class LiveLyricService : NotificationListenerService() {
 
     private fun updateCurrentController(controllers: List<MediaController>?) {
         if (controllers.isNullOrEmpty()) {
-            unregisterCurrentController()
+            unregisterAllControllers()
             clearLyricState()
             return
         }
 
-        val targetController = controllers.find {
+        val playingController = controllers.find {
             it.playbackState?.state == PlaybackState.STATE_PLAYING
-        } ?: controllers.first()
+        }
 
-        if (currentController?.sessionToken != targetController.sessionToken) {
-            unregisterCurrentController()
-            currentController = targetController
-            currentController?.registerCallback(mediaCallback)
-            syncToGlobalData(targetController, forceUpdate = true)
+        if (playingController != null) {
+            val alreadyTracking = currentControllers.singleOrNull()?.sessionToken == playingController.sessionToken
+            if (!alreadyTracking) {
+                unregisterAllControllers()
+                currentControllers.add(playingController)
+                playingController.registerCallback(mediaCallback)
+                syncToGlobalData(playingController, forceUpdate = true)
+            }
+        } else {
+            val currentTokens = currentControllers.map { it.sessionToken }.toSet()
+            val newTokens = controllers.map { it.sessionToken }.toSet()
+            if (currentTokens != newTokens) {
+                unregisterAllControllers()
+                for (controller in controllers) {
+                    currentControllers.add(controller)
+                    controller.registerCallback(mediaCallback)
+                }
+                syncToGlobalData(controllers.first(), forceUpdate = true)
+            }
         }
     }
 
-    private fun unregisterCurrentController() {
-        try {
-            currentController?.unregisterCallback(mediaCallback)
-        } catch (_: Exception) {}
-        currentController = null
+    private fun unregisterAllControllers() {
+        for (controller in currentControllers) {
+            try {
+                controller.unregisterCallback(mediaCallback)
+            } catch (_: Exception) {}
+        }
+        currentControllers.clear()
     }
 
     private fun clearLyricState() {
@@ -159,18 +175,16 @@ class LiveLyricService : NotificationListenerService() {
 
     private val mediaCallback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) {
-            syncToGlobalData(currentController, forceUpdate = true)
+            val playingController = currentControllers.find {
+                it.playbackState?.state == PlaybackState.STATE_PLAYING
+            } ?: currentControllers.firstOrNull()
+            syncToGlobalData(playingController, forceUpdate = true)
         }
         override fun onPlaybackStateChanged(state: PlaybackState?) {
-            syncToGlobalData(currentController, forceUpdate = true)
-            
-            val status = state?.state
-            if (status == PlaybackState.STATE_PAUSED || status == PlaybackState.STATE_STOPPED) {
-                try {
-                    val componentName = ComponentName(this@LiveLyricService, LiveLyricService::class.java)
-                    updateCurrentController(mediaSessionManager.getActiveSessions(componentName))
-                } catch (_: Exception) {}
-            }
+            try {
+                val componentName = ComponentName(this@LiveLyricService, LiveLyricService::class.java)
+                updateCurrentController(mediaSessionManager.getActiveSessions(componentName))
+            } catch (_: Exception) {}
         }
         override fun onSessionDestroyed() {
             try {
@@ -744,6 +758,6 @@ class LiveLyricService : NotificationListenerService() {
         serviceScope.cancel()
         tickerJob?.cancel()
         progressJob?.cancel()
-        currentController?.unregisterCallback(mediaCallback)
+        unregisterAllControllers()
     }
   }
