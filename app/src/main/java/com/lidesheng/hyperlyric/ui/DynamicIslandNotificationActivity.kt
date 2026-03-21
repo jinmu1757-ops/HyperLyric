@@ -379,7 +379,7 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
                                                 )
                                                 SuperSwitch(
                                                     title = "保持后台运行",
-                                                    summary = "实验性功能，未测试耗电详细\n如果没有通知发送，可尝试手动开关一遍该功能强行唤醒服务",
+                                                    summary = "如果没有通知发送，可手动开关一遍该功能强行唤醒服务",
                                                     checked = persistentEnabled,
                                                     onCheckedChange = { checked ->
                                                         persistentEnabled = checked
