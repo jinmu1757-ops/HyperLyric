@@ -55,4 +55,40 @@ object Constants {
     const val DEFAULT_PROGRESS_COLOR_ENABLED = true
     const val DEFAULT_FOCUS_NOTIFICATION_TYPE = 0 // 0: OS3样式, 1: 兼容OS2
     const val DEFAULT_REMOVE_FOCUS_WHITELIST = false
+
+    // 歌词显示 - 新增
+    const val KEY_FONT_WEIGHT = "key_font_weight"
+    const val KEY_FONT_BOLD = "key_font_bold"
+    const val KEY_FONT_ITALIC = "key_font_italic"
+    const val KEY_FADING_EDGE_LENGTH = "key_fading_edge_length"
+    const val KEY_GRADIENT_PROGRESS = "key_gradient_progress"
+    const val KEY_PLACEHOLDER_FORMAT = "key_placeholder_format"
+
+    // 特殊功能 - 新增
+    const val KEY_MARQUEE_LOOP_DELAY = "key_marquee_loop_delay"
+    const val KEY_MARQUEE_INFINITE = "key_marquee_infinite"
+    const val KEY_MARQUEE_STOP_END = "key_marquee_stop_end"
+
+    const val KEY_SYLLABLE_RELATIVE = "key_syllable_relative"
+    const val KEY_SYLLABLE_HIGHLIGHT = "key_syllable_highlight"
+    const val KEY_TEXT_SIZE_RATIO = "key_text_size_ratio"
+
+
+    // 新增默认值
+    const val DEFAULT_FONT_WEIGHT = 400
+    const val DEFAULT_FONT_BOLD = false
+    const val DEFAULT_FONT_ITALIC = false
+    const val DEFAULT_FADING_EDGE_LENGTH = 10
+    const val DEFAULT_GRADIENT_PROGRESS = true
+    const val DEFAULT_PLACEHOLDER_FORMAT = 2 // 0: None, 1: Name, 2: Name+Artist
+
+    const val DEFAULT_MARQUEE_MODE = true
+    const val DEFAULT_MARQUEE_LOOP_DELAY = 700
+    const val DEFAULT_MARQUEE_INFINITE = true
+    const val DEFAULT_MARQUEE_STOP_END = false
+    const val DEFAULT_TEXT_SIZE_RATIO = 0.86f
+
+    const val DEFAULT_SYLLABLE_RELATIVE = false
+    const val DEFAULT_SYLLABLE_HIGHLIGHT = true
+
 }

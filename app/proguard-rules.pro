@@ -22,3 +22,7 @@
 -dontwarn java.lang.reflect.AnnotatedType
 -dontwarn com.highcapable.kavaref.**
 -dontwarn com.highcapable.yukihookapi.**
+
+# --- Lyricon Receiver ---
+-keep class io.github.proify.lyricon.lyric.model.** { *; }
+-keep interface io.github.proify.lyricon.provider.** { *; }

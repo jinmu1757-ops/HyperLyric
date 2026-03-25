@@ -1,5 +1,6 @@
 package com.lidesheng.hyperlyric.ui
 
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
@@ -63,6 +66,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import androidx.core.net.toUri
 
 class HookSettingsActivity : ComponentActivity() {
 
@@ -249,6 +253,7 @@ class HookSettingsActivity : ComponentActivity() {
                 TopAppBar(
                     color = Color.Transparent,
                     title = "自定义配置",
+                    largeTitle = "自定义配置",
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         IconButton(
@@ -256,6 +261,25 @@ class HookSettingsActivity : ComponentActivity() {
                             modifier = Modifier.padding(start = 12.dp)
                         ) {
                             Icon(imageVector = MiuixIcons.Back, contentDescription = "返回")
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                try {
+                                    val url = getString(com.lidesheng.hyperlyric.R.string.provider_release_home)
+                                    val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+                                    startActivity(intent)
+                                } catch (_: Exception) { }
+                            },
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = com.lidesheng.hyperlyric.R.drawable.ic_github),
+                                contentDescription = "GitHub",
+                                tint = MiuixTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(26.dp)
+                            )
                         }
                     },
                     modifier = Modifier.hazeEffect(hazeState) {
@@ -319,14 +343,14 @@ class HookSettingsActivity : ComponentActivity() {
                             Card(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
                                     SuperArrow(
-                                        title = "歌词文字大小",
-                                        summary = "${textSize}sp",
-                                        onClick = { showTextSizeDialog = true }
+                                        title = "超级岛长度",
+                                        summary = "$islandLength",
+                                        onClick = { showIslandLengthDialog = true }
                                     )
                                     SuperArrow(
-                                        title = "多行模式下文字大小比例",
-                                        summary = "${(textSizeRatio * 100).toInt()}%",
-                                        onClick = { showTextSizeRatioDialog = true }
+                                        title = "文字大小",
+                                        summary = "$textSize",
+                                        onClick = { showTextSizeDialog = true }
                                     )
                                     SuperArrow(
                                         title = "字重",
@@ -350,8 +374,13 @@ class HookSettingsActivity : ComponentActivity() {
                                         }
                                     )
                                     SuperArrow(
+                                        title = "多行模式下文字大小比例",
+                                        summary = "${(textSizeRatio * 100).toInt()}%",
+                                        onClick = { showTextSizeRatioDialog = true }
+                                    )
+                                    SuperArrow(
                                         title = "羽化边缘长度",
-                                        summary = "${fadingEdge}px",
+                                        summary = "$fadingEdge",
                                         onClick = { showFadingEdgeDialog = true }
                                     )
                                     SuperSwitch(
@@ -361,11 +390,6 @@ class HookSettingsActivity : ComponentActivity() {
                                             gradientStyle = it
                                             saveConfig(Constants.KEY_GRADIENT_PROGRESS, it)
                                         }
-                                    )
-                                    SuperArrow(
-                                        title = "超级岛长度",
-                                        summary = "${islandLength}dp",
-                                        onClick = { showIslandLengthDialog = true }
                                     )
                                 }
                             }
@@ -402,11 +426,6 @@ class HookSettingsActivity : ComponentActivity() {
                                                 summary = "${marqueeDelay}ms",
                                                 onClick = { showMarqueeDelayDialog = true }
                                             )
-                                            SuperArrow(
-                                                title = "循环间隔",
-                                                summary = "${marqueeLoop}ms",
-                                                onClick = { showMarqueeLoopDialog = true }
-                                            )
                                             SuperSwitch(
                                                 title = "无限循环",
                                                 checked = marqueeInfinite,
@@ -414,6 +433,11 @@ class HookSettingsActivity : ComponentActivity() {
                                                     marqueeInfinite = it
                                                     saveConfig(Constants.KEY_MARQUEE_INFINITE, it)
                                                 }
+                                            )
+                                            SuperArrow(
+                                                title = "循环间隔",
+                                                summary = "${marqueeLoop}ms",
+                                                onClick = { showMarqueeLoopDialog = true }
                                             )
                                             SuperSwitch(
                                                 title = "结束时在末尾停止",
@@ -465,7 +489,7 @@ class HookSettingsActivity : ComponentActivity() {
                 // Dialog rendering
                 NumberInputDialog(
                     show = showTextSizeDialog,
-                    title = "歌词文字大小",
+                    title = "文字大小",
                     label = "范围：8 ~ 16",
                     initialValue = textSize,
                     min = 8, max = 16,
@@ -538,9 +562,9 @@ class HookSettingsActivity : ComponentActivity() {
                 NumberInputDialog(
                     show = showIslandLengthDialog,
                     title = "超级岛长度",
-                    label = "范围：50 ~ 300",
+                    label = "范围：50 ~ 100",
                     initialValue = islandLength,
-                    min = 50, max = 300,
+                    min = 50, max = 100,
                     onDismiss = { showIslandLengthDialog = false },
                     onConfirm = { value ->
                         islandLength = value
@@ -550,7 +574,7 @@ class HookSettingsActivity : ComponentActivity() {
                 NumberInputDialog(
                     show = showTextSizeRatioDialog,
                     title = "多行模式下文字大小比例",
-                    label = "% 范围：10 ~ 100",
+                    label = "范围：10 ~ 100",
                     initialValue = (textSizeRatio * 100).toInt(),
                     min = 10, max = 100,
                     onDismiss = { showTextSizeRatioDialog = false },

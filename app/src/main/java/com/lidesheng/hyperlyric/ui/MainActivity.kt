@@ -466,7 +466,7 @@ fun AboutContent(modifier: Modifier = Modifier) {
         {
             Column {
                 Text(
-                    text = "Salt Player\nQQ音乐\n更多应用等你发现...",
+                    text = "Salt Player、QQ音乐\n更多应用等你发现...",
                     style = MiuixTheme.textStyles.body2
                 )
             }
@@ -478,7 +478,7 @@ fun AboutContent(modifier: Modifier = Modifier) {
         )
         Card(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "目前仅支持下拉小窗白名单hook，启用此模块并勾选系统界面，重启系统界面后即可使用。",
+                text = "仅支持HyperOS3设备，下载对应的歌词提供器，勾选推荐应用，重启系统界面和音乐软件后即可使用。",
                 fontSize = 13.sp,
                 color = MiuixTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(16.dp),
