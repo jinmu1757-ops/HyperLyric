@@ -76,6 +76,8 @@ class LicensesActivity : ComponentActivity() {
             listOf(
                 LicenseItem("miuix", "YuKongA", "https://github.com/Yukonga/MIUIX"),
                 LicenseItem("libxposed API", "libxposed", "https://github.com/libxposed/api"),
+                LicenseItem("lyricon", "tomakino", "https://github.com/tomakino/lyricon"),
+                LicenseItem("LyricProvider", "tomakino", "https://github.com/tomakino/LyricProvider"),
                 LicenseItem("haze", "chrisbanes", "https://github.com/chrisbanes/haze"),
                 LicenseItem("retrofit", "square", "https://github.com/square/retrofit"),
                 LicenseItem("okhttp", "square", "https://github.com/square/okhttp"),

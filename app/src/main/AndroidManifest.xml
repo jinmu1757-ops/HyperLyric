@@ -46,7 +46,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".ui.BackupActivity"
+            android:name=".ui.HookSettingsActivity"
             android:exported="false" />
 
         <activity

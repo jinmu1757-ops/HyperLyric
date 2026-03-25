@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,7 +80,6 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.extra.SuperArrow
 import top.yukonga.miuix.kmp.extra.SuperDialog
-import top.yukonga.miuix.kmp.extra.SuperDropdown
 import top.yukonga.miuix.kmp.extra.SuperSwitch
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.basic.ArrowRight
@@ -288,7 +286,6 @@ fun MainScreen() {
                 ) {
                     item {
                         Column {
-                            Spacer(modifier = Modifier.height(20.dp))
                              Card(
                                  modifier = Modifier.fillMaxWidth(),
                                  onClick = {
@@ -315,10 +312,9 @@ fun MainScreen() {
                             Card(modifier = Modifier.fillMaxWidth()) {
                                 Column {
                                     SuperArrow(
-                                        title = "自定义配置",
-                                        summary = "仅于hook模式时作用",
+                                        title = "小米超级岛hook自定义配置",
                                         onClick = {
-                                            context.startActivity(Intent(context, SettingsActivity::class.java))
+                                            context.startActivity(Intent(context, HookSettingsActivity::class.java))
                                         }
                                     )
                                     SuperArrow(
@@ -343,81 +339,33 @@ fun MainScreen() {
                             )
 
                             Card(modifier = Modifier.fillMaxWidth()) {
-                                SuperArrow(
-                                    title = "重启系统界面",
-                                    onClick = { showRestartDialog = true }
-                                )
-                                var removeFocusWhitelist by remember { mutableStateOf(prefs.getBoolean(Constants.KEY_REMOVE_FOCUS_WHITELIST, Constants.DEFAULT_REMOVE_FOCUS_WHITELIST)) }
-                                SuperSwitch(
-                                    title = "移除焦点通知白名单",
-                                    summary = "不要和其他模块的相同功能冲突使用",
-                                    checked = removeFocusWhitelist,
-                                    onCheckedChange = {
-                                        removeFocusWhitelist = it
-                                        prefs.edit { putBoolean(Constants.KEY_REMOVE_FOCUS_WHITELIST, it) }
-                                        ConfigSync.syncPreference(Constants.PREF_NAME, Constants.KEY_REMOVE_FOCUS_WHITELIST, it)
-                                    }
-                                )
-                                SuperArrow(
-                                    title = "备份与恢复",
-                                    onClick = {
-                                        context.startActivity(Intent(context, BackupActivity::class.java))
-                                    }
-                                )
-                            }
-
-                            SmallTitle(
-                                text = "个性化设置",
-                                insideMargin = PaddingValues(10.dp, 4.dp)
-                            )
-
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                val prefs = remember { context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE) }
-                                var themeMode by remember { mutableIntStateOf(prefs.getInt(Constants.KEY_THEME_MODE, Constants.DEFAULT_THEME_MODE)) }
-                                val themeOptions = listOf("跟随系统", "浅色", "深色", "跟随系统（莫奈）", "浅色（莫奈）", "深色（莫奈）")
-
-                                SuperDropdown(
-                                    title = "主题颜色",
-                                    items = themeOptions,
-                                    selectedIndex = themeMode,
-                                    onSelectedIndexChange = {
-                                        themeMode = it
-                                        prefs.edit { putInt(Constants.KEY_THEME_MODE, it) }
-                                    }
-                                )
-
-                                if (themeMode >= 3) {
-                                    var monetColorIndex by remember { mutableIntStateOf(prefs.getInt(Constants.KEY_MONET_COLOR, Constants.DEFAULT_MONET_COLOR)) }
-                                    val monetOptions = listOf("默认", "蓝色", "绿色", "红色", "黄色", "橙色", "紫色", "粉色")
-                                    
-                                    SuperDropdown(
-                                        title = "强调色",
-                                        items = monetOptions,
-                                        selectedIndex = monetColorIndex,
-                                        onSelectedIndexChange = {
-                                            monetColorIndex = it
-                                            prefs.edit { putInt(Constants.KEY_MONET_COLOR, it) }
+                                Column {
+                                    SuperArrow(
+                                        title = "重启系统界面",
+                                        onClick = { showRestartDialog = true }
+                                    )
+                                    var removeFocusWhitelist by remember { mutableStateOf(prefs.getBoolean(Constants.KEY_REMOVE_FOCUS_WHITELIST, Constants.DEFAULT_REMOVE_FOCUS_WHITELIST)) }
+                                    SuperSwitch(
+                                        title = "移除焦点通知白名单",
+                                        summary = "不要和其他模块的相同功能冲突使用",
+                                        checked = removeFocusWhitelist,
+                                        onCheckedChange = {
+                                            removeFocusWhitelist = it
+                                            prefs.edit { putBoolean(Constants.KEY_REMOVE_FOCUS_WHITELIST, it) }
+                                            ConfigSync.syncPreference(Constants.PREF_NAME, Constants.KEY_REMOVE_FOCUS_WHITELIST, it)
                                         }
                                     )
                                 }
+                            }
 
-                                SuperSwitch(
-                                    title = "悬浮底栏",
-                                    checked = floatingNavBarEnabled,
-                                    onCheckedChange = {
-                                        floatingNavBarEnabled = it
-                                        prefs.edit { putBoolean(Constants.KEY_FLOATING_NAV_BAR, it) }
-                                    }
-                                )
+                            Spacer(modifier = Modifier.height(20.dp))
 
-                                var excludeFromRecents by remember { mutableStateOf(prefs.getBoolean(Constants.KEY_EXCLUDE_FROM_RECENTS, Constants.DEFAULT_EXCLUDE_FROM_RECENTS)) }
-                                SuperSwitch(
-                                    title = "隐藏后台卡片",
-                                    checked = excludeFromRecents,
-                                    onCheckedChange = {
-                                        excludeFromRecents = it
-                                        prefs.edit { putBoolean(Constants.KEY_EXCLUDE_FROM_RECENTS, it) }
-                                        (context as? MainActivity)?.setExcludeFromRecents(it)
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                SuperArrow(
+                                    title = "应用设置",
+                                    summary = "个性化、备份与恢复等",
+                                    onClick = {
+                                        context.startActivity(Intent(context, SettingsActivity::class.java))
                                     }
                                 )
                             }
