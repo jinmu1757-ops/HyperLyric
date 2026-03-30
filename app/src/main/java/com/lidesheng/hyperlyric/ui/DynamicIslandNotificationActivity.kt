@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,15 +41,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import androidx.compose.runtime.collectAsState
 import com.lidesheng.hyperlyric.Constants
 import com.lidesheng.hyperlyric.ForegroundLyricService
 import com.lidesheng.hyperlyric.LyricTileService
+import com.lidesheng.hyperlyric.model.DynamicLyricData
 import com.lidesheng.hyperlyric.utils.ThemeUtils
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -67,9 +71,27 @@ import top.yukonga.miuix.kmp.extra.SuperSwitch
 import top.yukonga.miuix.kmp.extra.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+
+val commonMusicApps = mapOf(
+    "com.salt.music" to "Salt Player",
+    "com.netease.cloudmusic" to "网易云音乐",
+    "com.tencent.qqmusic" to "QQ音乐",
+    "cn.kuwo.player" to "酷我音乐",
+    "com.kugou.android" to "酷狗音乐",
+    "com.apple.android.music" to "Apple Music",
+    "com.spotify.music" to "Spotify",
+    "cmccwm.mobilemusic" to "咪咕音乐",
+    "com.luna.music" to "汽水音乐",
+    "com.kugou.android.lite" to "酷狗音乐概念版",
+    "com.google.android.apps.youtube.music" to "YouTube Music",
+    "cn.wenyu.bodian" to "波点音乐",
+    "com.miui.player" to "小米音乐",
+    "com.xuncorp.qinalt.music" to "青盐云听"
+)
 
 class DynamicIslandNotificationActivity : ComponentActivity() {
 
@@ -115,9 +137,21 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
         var showCacheLimitDialog by remember { mutableStateOf(false) }
         var tempCacheLimit by remember { mutableStateOf(onlineLyricCacheLimit.toString()) }
 
-        val tabs = listOf("基础设置", "个性化设置")
+        val tabs = listOf("基础设置", "个性化设置", "歌词白名单")
         val pagerState = rememberPagerState { tabs.size }
         var selectedTabIndex by remember { mutableIntStateOf(0) }
+
+        LaunchedEffect(Unit) {
+            DynamicLyricData.initWhitelist(context)
+        }
+
+        val whitelistSet by DynamicLyricData.whitelistState.collectAsState()
+        val whitelist = remember(whitelistSet) { whitelistSet.toList() }
+
+        var showAddWhitelistDialog by remember { mutableStateOf(false) }
+        var showDeleteWhitelistDialog by remember { mutableStateOf(false) }
+        var tempWhitelistInput by remember { mutableStateOf("") }
+        var packageToDelete by remember { mutableStateOf("") }
 
         LaunchedEffect(pagerState.currentPage) {
             selectedTabIndex = pagerState.currentPage
@@ -207,6 +241,81 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
+                }
+            }
+
+            if (showAddWhitelistDialog) {
+                WindowDialog(
+                    title = "输入应用包名",
+                    show = true,
+                    onDismissRequest = { showAddWhitelistDialog = false }
+                ) {
+                    Column {
+                        TextField(
+                            value = tempWhitelistInput,
+                            onValueChange = { tempWhitelistInput = it },
+                            label = "例如 com.netease.cloudmusic",
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                text = "取消",
+                                onClick = { showAddWhitelistDialog = false },
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(20.dp))
+                            TextButton(
+                                text = "保存",
+                                colors = ButtonDefaults.textButtonColorsPrimary(),
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    if (tempWhitelistInput.isNotBlank()) {
+                                        val success =
+                                            DynamicLyricData.addPackageToWhitelist(context, tempWhitelistInput)
+                                        if (success) {
+                                            showAddWhitelistDialog = false
+                                        } else {
+                                            Toast.makeText(context, "该应用已存在", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } else {
+                                        Toast.makeText(context, "包名不能为空", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (showDeleteWhitelistDialog) {
+                WindowDialog(
+                    title = "确认从白名单中移除应用吗？",
+                    show = true,
+                    onDismissRequest = { showDeleteWhitelistDialog = false }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { showDeleteWhitelistDialog = false },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(20.dp))
+                        TextButton(
+                            text = "确认",
+                            colors = ButtonDefaults.textButtonColorsPrimary(),
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                DynamicLyricData.removePackageFromWhitelist(context, packageToDelete)
+                                showDeleteWhitelistDialog = false
+                            }
+                        )
                     }
                 }
             }
@@ -547,6 +656,86 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
                                             }
                                         )
                                     }
+                                }
+                            }
+                        }
+                        2 -> {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .scrollEndHaptic()
+                                    .hazeSource(state = hazeState)
+                                    .overScrollVertical()
+                                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                                contentPadding = PaddingValues(
+                                    top = padding.calculateTopPadding(),
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    bottom = padding.calculateBottomPadding()
+                                )
+                            ) {
+                                item {
+                                    Card(modifier = Modifier.fillMaxWidth()) {
+                                        SuperArrow(
+                                            title = "添加白名单应用",
+                                            onClick = {
+                                                tempWhitelistInput = ""
+                                                showAddWhitelistDialog = true
+                                            },
+                                            holdDownState = showAddWhitelistDialog
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    SmallTitle(
+                                        text = "已添加的应用",
+                                        insideMargin = PaddingValues(10.dp, 4.dp)
+                                    )
+                                }
+
+                                item {
+                                    if (whitelist.isNotEmpty()) {
+                                        Card(modifier = Modifier.fillMaxWidth()) {
+                                            Column {
+                                                whitelist.forEachIndexed { _, packageName ->
+                                                    val appName = commonMusicApps[packageName]
+                                                    BasicComponent(
+                                                        title = appName ?: packageName,
+                                                        summary = if (appName != null) packageName else null,
+                                                        endActions = {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    packageToDelete = packageName
+                                                                    showDeleteWhitelistDialog = true
+                                                                }
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = MiuixIcons.Delete,
+                                                                    contentDescription = "删除",
+                                                                    tint = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                                                )
+                                                            }
+                                                        },
+                                                        onClick = {
+                                                            packageToDelete = packageName
+                                                            showDeleteWhitelistDialog = true
+                                                        },
+                                                        holdDownState = showDeleteWhitelistDialog && packageToDelete == packageName
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Card(modifier = Modifier.fillMaxWidth()) {
+                                            top.yukonga.miuix.kmp.basic.Text(
+                                                text = "暂无白名单应用",
+                                                color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                                                modifier = Modifier.padding(16.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(20.dp))
                                 }
                             }
                         }

@@ -318,12 +318,6 @@ fun MainScreen() {
                                         }
                                     )
                                     SuperArrow(
-                                        title = "自定义白名单",
-                                        onClick = {
-                                            context.startActivity(Intent(context, WhitelistActivity::class.java))
-                                        }
-                                    )
-                                    SuperArrow(
                                         title = "灵动岛歌词通知",
                                         summary = "适用于无root设备",
                                         onClick = {

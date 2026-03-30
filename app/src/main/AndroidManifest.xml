@@ -41,11 +41,6 @@
             android:exported="false" />
 
         <activity
-            android:name=".ui.WhitelistActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
             android:name=".ui.DynamicIslandNotificationActivity"
             android:exported="false" />
 
