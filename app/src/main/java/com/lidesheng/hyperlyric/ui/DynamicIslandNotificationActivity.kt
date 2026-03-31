@@ -33,7 +33,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -139,7 +141,7 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
 
         val tabs = listOf("基础设置", "个性化设置", "歌词白名单")
         val pagerState = rememberPagerState { tabs.size }
-        var selectedTabIndex by remember { mutableIntStateOf(0) }
+        val coroutineScope = rememberCoroutineScope()
 
         LaunchedEffect(Unit) {
             DynamicLyricData.initWhitelist(context)
@@ -153,13 +155,7 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
         var tempWhitelistInput by remember { mutableStateOf("") }
         var packageToDelete by remember { mutableStateOf("") }
 
-        LaunchedEffect(pagerState.currentPage) {
-            selectedTabIndex = pagerState.currentPage
-        }
 
-        LaunchedEffect(selectedTabIndex) {
-            pagerState.animateScrollToPage(selectedTabIndex)
-        }
 
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestPermission(),
@@ -192,8 +188,12 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
                     )
                     TabRow(
                         tabs = tabs,
-                        selectedTabIndex = selectedTabIndex,
-                        onTabSelected = { selectedTabIndex = it },
+                        selectedTabIndex = pagerState.currentPage,
+                        onTabSelected = { 
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(it)
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)

@@ -233,15 +233,10 @@ fun MainScreen() {
     ) { padding ->
         WindowDialog(
             title = "是否重启系统界面？",
+            summary = "更新应用后才需要重启哦",
             show = showRestartDialog,
             onDismissRequest = { showRestartDialog = false }
         ) {
-            Text(
-                text = "更新应用后才需要重启哦",
-                modifier = Modifier.padding(bottom = 16.dp),
-                color = MiuixTheme.colorScheme.onSurfaceSecondary,
-                fontSize = 14.sp
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End

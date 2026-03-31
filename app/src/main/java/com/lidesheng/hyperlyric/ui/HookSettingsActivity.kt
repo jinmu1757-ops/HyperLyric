@@ -27,7 +27,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -331,17 +330,10 @@ class HookSettingsActivity : ComponentActivity() {
         // Tab state
         val tabs = listOf("歌词", "动画", "歌词提供者")
         val pagerState = rememberPagerState { tabs.size }
-        var selectedTabIndex by remember { mutableIntStateOf(0) }
         val coroutineScope = rememberCoroutineScope()
         val context = LocalContext.current
         val providerUiStateFlow = remember { MutableStateFlow(ProviderUiState()) }
         val providerUiState = providerUiStateFlow.collectAsState()
-
-        LaunchedEffect(pagerState) {
-            snapshotFlow { pagerState.currentPage }.collect { page ->
-                selectedTabIndex = page
-            }
-        }
 
         LaunchedEffect(Unit) {
             LyricProviderManager.loadProviders(context, providerUiStateFlow)
@@ -419,11 +411,10 @@ class HookSettingsActivity : ComponentActivity() {
                     }
                     TabRow(
                         tabs = tabs,
-                        selectedTabIndex = selectedTabIndex,
+                        selectedTabIndex = pagerState.currentPage,
                         onTabSelected = {
-                            selectedTabIndex = it
                             coroutineScope.launch {
-                                pagerState.scrollToPage(it)
+                                pagerState.animateScrollToPage(it)
                             }
                         },
                         modifier = Modifier

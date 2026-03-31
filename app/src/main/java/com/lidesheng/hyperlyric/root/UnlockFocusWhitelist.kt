@@ -70,6 +70,7 @@ object UnlockFocusWhitelist {
                         f.isAccessible = true
                         (f.get(thisObj) as? Context)?.let { context ->
                             doHookInClassLoader(context.classLoader)
+                            UnlockIslandWhitelist.doHookInClassLoader(context.classLoader)
                         }
                     }
                 }

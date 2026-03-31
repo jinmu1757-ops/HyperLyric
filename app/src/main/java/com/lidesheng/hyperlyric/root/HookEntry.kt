@@ -25,7 +25,7 @@ class HookEntry : XposedModule() {
         
         if (packageName == "com.android.systemui") {
             HookIslandLyric.hookSystemUIDynamicIsland(this, param)
-            UnlockIslandWhitelist.hook(this)
+            UnlockIslandWhitelist.hook(this, param.defaultClassLoader)
             UnlockFocusWhitelist.hook(this, param.defaultClassLoader)
             
             // 劫持 Application.onCreate 以初始化 Lyricon Receiver 所需的环境
@@ -39,16 +39,11 @@ class HookEntry : XposedModule() {
             }
         } else if (packageName == "miui.systemui.plugin") {
             UnlockFocusWhitelist.hook(this, param.defaultClassLoader)
+            UnlockIslandWhitelist.hook(this, param.defaultClassLoader)
         }
     }
 }
 
-/**
- * Application.onCreate 拦截器
- *
- * 独立顶层类，遵循 libxposed API 101 的 Hooker 规范：
- * 不依赖外部类引用，通过 [HookIslandLyric.module] 获取 XposedModule 实例。
- */
 class AppCreateHooker : Hooker {
 
     override fun intercept(chain: Chain): Any? {
@@ -96,13 +91,10 @@ class AppCreateHooker : Hooker {
             }
 
             override fun onPositionChanged(position: Long) {
-                // 极速通道：高速下发进度驱动底层 RenderNode 绘制，不触发父 View 重绘
                 val activePkg = LyriconDataBridge.activePackageName
                 if (activePkg != null) {
                     HookIslandLyric.updateActiveIslandsPosition(position, activePkg)
                 }
-
-                // 兼容普通文本更新
                 if (LyriconDataBridge.updatePosition(position)) {
                     val currentLyric = LyriconDataBridge.currentLyric
                     if (currentLyric != null && activePkg != null) {
