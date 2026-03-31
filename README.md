@@ -12,4 +12,5 @@
 
 ## 📎 项目引用与参考
 - [miuix](https://github.com/compose-miuix-ui/miuix)
+- [lyricon](https://github.com/tomakino/lyricon) - 歌词动画与逻辑参考
 - 以及很多没列出的项目，感谢
