@@ -86,6 +86,7 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import androidx.core.net.toUri
+import top.yukonga.miuix.kmp.basic.BasicComponent
 
 private val animLabelMap = mapOf(
     "default" to "默认",
@@ -995,13 +996,10 @@ class HookSettingsActivity : ComponentActivity() {
                 }
             } else if (!uiState.isLoading && uiState.modules.isEmpty()) {
                 item {
-                    Box(
-                        modifier = Modifier.fillParentMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "暂未发现歌词提供者，请点击右上角图标前往LyricProvider仓库下载",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantActions
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        BasicComponent(
+                            title = "暂未发现歌词提供者",
+                            summary = "请点击右上角图标前往 LyricProvider 仓库下载安装并启用插件"
                         )
                     }
                 }

@@ -79,18 +79,19 @@ class SettingsActivity : ComponentActivity() {
     }
 
     private fun buildBackupJson(): String {
-        val config = JSONObject().apply {
-            put(Constants.KEY_TEXT_SIZE, prefs.getInt(Constants.KEY_TEXT_SIZE, Constants.DEFAULT_TEXT_SIZE))
-            put(Constants.KEY_MAX_LEFT_WIDTH, prefs.getInt(Constants.KEY_MAX_LEFT_WIDTH, Constants.DEFAULT_MAX_LEFT_WIDTH))
-            put(Constants.KEY_MARQUEE_MODE, prefs.getBoolean(Constants.KEY_MARQUEE_MODE, Constants.DEFAULT_MARQUEE))
-            put(Constants.KEY_MARQUEE_SPEED, prefs.getInt(Constants.KEY_MARQUEE_SPEED, Constants.DEFAULT_MARQUEE_SPEED))
-            put(Constants.KEY_MARQUEE_DELAY, prefs.getInt(Constants.KEY_MARQUEE_DELAY, Constants.DEFAULT_MARQUEE_DELAY))
-            put(Constants.KEY_HIDE_NOTCH, prefs.getBoolean(Constants.KEY_HIDE_NOTCH, Constants.DEFAULT_HIDE_NOTCH))
-            put(Constants.KEY_ANIM_MODE, prefs.getInt(Constants.KEY_ANIM_MODE, Constants.DEFAULT_ANIM_MODE))
-            put(Constants.KEY_ONLINE_LYRIC_CACHE_LIMIT, prefs.getInt(Constants.KEY_ONLINE_LYRIC_CACHE_LIMIT, Constants.DEFAULT_ONLINE_LYRIC_CACHE_LIMIT))
-            put(Constants.KEY_NOTIFICATION_CLICK_ACTION, prefs.getInt(Constants.KEY_NOTIFICATION_CLICK_ACTION, Constants.DEFAULT_NOTIFICATION_CLICK_ACTION))
-            val whitelist = prefs.getStringSet(Constants.KEY_WHITELIST, emptySet()) ?: emptySet()
-            put(Constants.KEY_WHITELIST, whitelist.joinToString(","))
+        val config = JSONObject()
+        prefs.all.forEach { (key, value) ->
+            when (value) {
+                is Boolean -> config.put(key, value)
+                is Int -> config.put(key, value)
+                is Float -> config.put(key, value.toDouble())
+                is Long -> config.put(key, value)
+                is String -> config.put(key, value)
+                is Set<*> -> {
+                    @Suppress("UNCHECKED_CAST")
+                    config.put(key, (value as Set<String>).joinToString(","))
+                }
+            }
         }
 
         val root = JSONObject().apply {
@@ -110,28 +111,52 @@ class SettingsActivity : ComponentActivity() {
             val config = root.getJSONObject("config")
 
             prefs.edit {
-                if (config.has(Constants.KEY_TEXT_SIZE))
-                    putInt(Constants.KEY_TEXT_SIZE, config.getInt(Constants.KEY_TEXT_SIZE).coerceIn(8, 27))
-                if (config.has(Constants.KEY_MAX_LEFT_WIDTH))
-                    putInt(Constants.KEY_MAX_LEFT_WIDTH, config.getInt(Constants.KEY_MAX_LEFT_WIDTH).coerceIn(40, 280))
-                if (config.has(Constants.KEY_MARQUEE_SPEED))
-                    putInt(Constants.KEY_MARQUEE_SPEED, config.getInt(Constants.KEY_MARQUEE_SPEED).coerceIn(10, 200))
-                if (config.has(Constants.KEY_MARQUEE_DELAY))
-                    putInt(Constants.KEY_MARQUEE_DELAY, config.getInt(Constants.KEY_MARQUEE_DELAY).coerceIn(0, 5000))
-                if (config.has(Constants.KEY_ANIM_MODE))
-                    putInt(Constants.KEY_ANIM_MODE, config.getInt(Constants.KEY_ANIM_MODE).coerceIn(0, 4))
-                if (config.has(Constants.KEY_ONLINE_LYRIC_CACHE_LIMIT))
-                    putInt(Constants.KEY_ONLINE_LYRIC_CACHE_LIMIT, config.getInt(Constants.KEY_ONLINE_LYRIC_CACHE_LIMIT).coerceIn(1, 1000))
-                if (config.has(Constants.KEY_NOTIFICATION_CLICK_ACTION))
-                    putInt(Constants.KEY_NOTIFICATION_CLICK_ACTION, config.getInt(Constants.KEY_NOTIFICATION_CLICK_ACTION).coerceIn(0, 2))
-                if (config.has(Constants.KEY_MARQUEE_MODE))
-                    putBoolean(Constants.KEY_MARQUEE_MODE, config.optBoolean(Constants.KEY_MARQUEE_MODE, Constants.DEFAULT_MARQUEE))
-                if (config.has(Constants.KEY_HIDE_NOTCH))
-                    putBoolean(Constants.KEY_HIDE_NOTCH, config.optBoolean(Constants.KEY_HIDE_NOTCH, Constants.DEFAULT_HIDE_NOTCH))
-                if (config.has(Constants.KEY_WHITELIST)) {
-                    val raw = config.optString(Constants.KEY_WHITELIST, "")
-                    val set = if (raw.isBlank()) emptySet() else raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-                    putStringSet(Constants.KEY_WHITELIST, set)
+                val keys = config.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val value = config.get(key)
+
+                    if (key == Constants.KEY_WHITELIST) {
+                        val raw = value.toString()
+                        val set = if (raw.isBlank()) emptySet() else raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                        putStringSet(key, set)
+                        continue
+                    }
+
+                    when (value) {
+                        is Boolean -> {
+                            putBoolean(key, value)
+                        }
+
+                        is Int -> {
+                            val boundedValue = when (key) {
+                                Constants.KEY_TEXT_SIZE -> value.coerceIn(8, 27)
+                                Constants.KEY_MAX_LEFT_WIDTH -> value.coerceIn(40, 280)
+                                Constants.KEY_MARQUEE_SPEED -> value.coerceIn(10, 500)
+                                Constants.KEY_MARQUEE_DELAY -> value.coerceIn(0, 5000)
+                                Constants.KEY_MARQUEE_LOOP_DELAY -> value.coerceIn(0, 5000)
+                                Constants.KEY_FADING_EDGE_LENGTH -> value.coerceIn(0, 100)
+                                Constants.KEY_ANIM_MODE -> value.coerceIn(0, 4)
+                                Constants.KEY_ONLINE_LYRIC_CACHE_LIMIT -> value.coerceIn(1, 1000)
+                                Constants.KEY_NOTIFICATION_CLICK_ACTION -> value.coerceIn(0, 2)
+                                else -> value
+                            }
+                            putInt(key, boundedValue)
+                        }
+
+                        is Double, is Float -> {
+                            val floats = (value as Number).toFloat()
+                            putFloat(key, floats)
+                        }
+
+                        is Long -> {
+                            putLong(key, value)
+                        }
+
+                        is String -> {
+                            putString(key, value)
+                        }
+                    }
                 }
             }
             true

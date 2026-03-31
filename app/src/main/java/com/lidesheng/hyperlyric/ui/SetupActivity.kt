@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,15 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
-import androidx.compose.ui.state.ToggleableState
 import androidx.core.content.edit
 import com.lidesheng.hyperlyric.Constants
 import com.lidesheng.hyperlyric.online.model.DynamicLyricData
-import com.lidesheng.hyperlyric.root.ShellUtils
 import com.lidesheng.hyperlyric.utils.ThemeUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -59,11 +57,12 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import androidx.core.net.toUri
 
 class SetupActivity : ComponentActivity() {
     @SuppressLint("CommitPrefEdits")
@@ -95,8 +94,8 @@ fun SetupScreen(onFinish: () -> Unit) {
     val prefs = remember { context.getSharedPreferences(Constants.PREF_NAME, Context.MODE_PRIVATE) }
     
     var workMode by remember { 
-        val initialMode = prefs.getInt(Constants.KEY_WORK_MODE, 1)
-        mutableIntStateOf(if (initialMode == 0) 1 else initialMode) 
+        val initialMode = prefs.getInt(Constants.KEY_WORK_MODE, Constants.DEFAULT_WORK_MODE)
+        mutableIntStateOf(initialMode) 
     }
     
     Scaffold(
@@ -135,25 +134,13 @@ fun SetupScreen(onFinish: () -> Unit) {
                 }
                 
                 val isLastPage = pagerState.currentPage == 3
-                val isRootMode = workMode == 0
                 
                 TextButton(
-                    text = when {
-                        isLastPage && isRootMode -> "重启系统界面"
-                        isLastPage -> "完成"
-                        else -> "下一步"
-                    },
+                    text = if (isLastPage) "完成" else "下一步",
                     colors = ButtonDefaults.textButtonColorsPrimary(),
                     onClick = {
                         if (isLastPage) {
-                            if (isRootMode) {
-                                scope.launch {
-                                    ShellUtils.restartSystemUI()
-                                    onFinish()
-                                }
-                            } else {
-                                onFinish()
-                            }
+                            onFinish()
                         } else {
                             scope.launch {
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
@@ -180,9 +167,9 @@ fun SetupScreen(onFinish: () -> Unit) {
                         prefs.edit { putInt(Constants.KEY_WORK_MODE, it) }
                     }
                 )
-                1 -> PermissionPage(workMode = workMode)
-                2 -> WhitelistPage()
-                3 -> CompletionPage()
+                1 -> if (workMode == 0) DisclaimerPage() else PermissionPage()
+                2 -> if (workMode == 0) DownloadProviderPage() else WhitelistPage()
+                3 -> CompletionPage(workMode = workMode)
             }
         }
     }
@@ -207,24 +194,25 @@ fun ModeSelectionPage(selectedMode: Int, onModeSelected: (Int) -> Unit) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                onClick = { onModeSelected(0) },
                 pressFeedbackType = PressFeedbackType.Tilt,
                 colors = CardDefaults.defaultColors(
-                    color = MiuixTheme.colorScheme.surfaceContainer
+                    color = if (selectedMode == 0) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surfaceContainer
                 )
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "hook模式 (暂不可用)",
+                            text = "hook模式",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            color = if (selectedMode == 0) Color.White else MiuixTheme.colorScheme.onSurface
                         )
                     }
                     Text(
-                        text = "由于适配工作，该模式暂时禁用，请关注后续更新",
+                        text = "仅支持HyperOS3设备root用户",
                         fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceSecondary.copy(alpha = 0.5f),
+                        color = if (selectedMode == 0) Color.White.copy(alpha = 0.8f) else MiuixTheme.colorScheme.onSurfaceSecondary,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
@@ -261,11 +249,9 @@ fun ModeSelectionPage(selectedMode: Int, onModeSelected: (Int) -> Unit) {
 }
 
 @Composable
-fun PermissionPage(workMode: Int) {
+fun PermissionPage() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     
-    val isRootGranted = remember { mutableStateOf(false) }
     val isNotificationGranted = remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -290,44 +276,26 @@ fun PermissionPage(workMode: Int) {
             )
         }
         
-        if (workMode == 0) {
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
                     ArrowPreference(
-                        title = "获取 Root 权限",
-                        summary = if (isRootGranted.value) "已获得 Root 权限" else "执行 'su' 命令请求权限",
+                        title = "通知监听权限",
+                        summary = if (isNotificationGranted.value) "权限已授予" else "读取播放状态和歌曲信息",
                         onClick = {
-                            scope.launch {
-                                val success = ShellUtils.execRootCmdSilent("ls /data")
-                                isRootGranted.value = success
-                                Toast.makeText(context, if (success) "权限已授予" else "请求失败，请检查授权管理", Toast.LENGTH_SHORT).show()
-                            }
+                            context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
                         }
                     )
-                }
-            }
-        } else {
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        ArrowPreference(
-                            title = "通知监听权限",
-                            summary = if (isNotificationGranted.value) "权限已授予" else "读取播放状态和歌曲信息",
-                            onClick = {
-                                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    ArrowPreference(
+                        title = "发送通知权限",
+                        summary = "允许app发送通知以显示歌词",
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                             }
-                        )
-                        ArrowPreference(
-                            title = "发送通知权限",
-                            summary = "允许app发送通知以显示歌词",
-                            onClick = {
-                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                }
-                                context.startActivity(intent)
-                            }
-                        )
-                    }
+                            context.startActivity(intent)
+                        }
+                    )
                 }
             }
         }
@@ -404,7 +372,7 @@ fun WhitelistPage() {
 }
 
 @Composable
-fun CompletionPage() {
+fun CompletionPage(workMode: Int) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 20.dp),
@@ -424,6 +392,76 @@ fun CompletionPage() {
                     text = "基础设置已完成",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold
+                )
+                if (workMode == 0) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "请前往lsposed启用HyperLyric和歌词提供器模块\n重启系统界面和音乐软件后即可使用",
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceSecondary,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DisclaimerPage() {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                text = "免责声明",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 20.dp)
+            )
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                BasicComponent(
+                    title = "温馨提示",
+                    summary = "Hook模式依赖系统级注入框架运行。\n\n启用后将修改系统界面的核心布局参数，极端情况下可能引发未知异常。\n\n请您务必知晓：因使用本模块导致的任何数据遗失或系统故障后果自负，开发者不承担任何直接或间接责任。"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DownloadProviderPage() {
+    val context = LocalContext.current
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                text = "前置依赖",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 20.dp)
+            )
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ArrowPreference(
+                    title = "下载歌词提供器",
+                    summary = "本应用移植了lyricon词幕相关功能，请前往Github下载安装对应版本的LyricProvider",
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW,
+                            "https://github.com/proify/LyricProvider/releases".toUri())
+                        context.startActivity(intent)
+                    }
                 )
             }
         }
