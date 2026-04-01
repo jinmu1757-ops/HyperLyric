@@ -64,6 +64,8 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
+import top.yukonga.miuix.kmp.basic.PullToRefresh
+import top.yukonga.miuix.kmp.basic.PullToRefreshState
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
@@ -74,6 +76,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.rememberPullToRefreshState
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
@@ -335,6 +338,7 @@ class HookSettingsActivity : ComponentActivity() {
         val context = LocalContext.current
         val providerUiStateFlow = remember { MutableStateFlow(ProviderUiState()) }
         val providerUiState = providerUiStateFlow.collectAsState()
+        val pullToRefreshState = rememberPullToRefreshState()
 
         LaunchedEffect(Unit) {
             LyricProviderManager.loadProviders(context, providerUiStateFlow)
@@ -834,7 +838,6 @@ class HookSettingsActivity : ComponentActivity() {
                                                     saveConfig(Constants.KEY_SYLLABLE_HIGHLIGHT, it)
                                                 }
                                             )
-                                            // 注意：逐字歌词功能的开启取决于数据源是否提供逐字数据，不再提供全局开关
                                         }
                                     }
                                 }
@@ -892,12 +895,20 @@ class HookSettingsActivity : ComponentActivity() {
                         }
                     }
                     2 -> {
-                        LyricProviderTab(
-                            uiState = providerUiState.value,
-                            padding = padding,
-                            hazeState = hazeState,
-                            scrollBehavior = scrollBehavior
-                        )
+                        Box(modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+                            LyricProviderTab(
+                                uiState = providerUiState.value,
+                                padding = padding,
+                                hazeState = hazeState,
+                                scrollBehavior = scrollBehavior,
+                                pullToRefreshState = pullToRefreshState,
+                                onRefresh = {
+                                    coroutineScope.launch {
+                                        LyricProviderManager.loadProviders(context, providerUiStateFlow)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -962,62 +973,65 @@ class HookSettingsActivity : ComponentActivity() {
         uiState: ProviderUiState,
         padding: PaddingValues,
         hazeState: HazeState,
-        scrollBehavior: ScrollBehavior
+        scrollBehavior: ScrollBehavior,
+        pullToRefreshState: PullToRefreshState,
+        onRefresh: () -> Unit
     ) {
         val groupedModules = remember(uiState.modules) {
             LyricProviderManager.categorizeModules(uiState.modules, "其他")
         }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .scrollEndHaptic()
-                .hazeSource(state = hazeState)
-                .overScrollVertical()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-            contentPadding = PaddingValues(
-                top = padding.calculateTopPadding(),
-                start = 12.dp,
-                end = 12.dp,
-                bottom = padding.calculateBottomPadding()
-            )
+        PullToRefresh(
+            isRefreshing = uiState.isLoading,
+            onRefresh = onRefresh,
+            pullToRefreshState = pullToRefreshState,
+            topAppBarScrollBehavior = scrollBehavior,
+            refreshTexts = listOf("下拉刷新", "松开刷新", "正在刷新...", "刷新成功"),
+            modifier = Modifier.fillMaxSize()
         ) {
-            if (uiState.isLoading && uiState.modules.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier.fillParentMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "正在扫描...",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantActions
-                        )
-                    }
-                }
-            } else if (!uiState.isLoading && uiState.modules.isEmpty()) {
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        BasicComponent(
-                            title = "暂未发现歌词提供者",
-                            summary = "请点击右上角图标前往 LyricProvider 仓库下载安装并启用插件"
-                        )
-                    }
-                }
-            } else {
-                groupedModules.forEach { category ->
-                    if (category.name.isNotBlank()) {
-                        item(key = "header_${category.name}") {
-                            SmallTitle(
-                                text = category.name,
-                                insideMargin = PaddingValues(start = 10.dp, end = 10.dp, top = 12.dp, bottom = 4.dp)
-                            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .scrollEndHaptic()
+                        .hazeSource(state = hazeState)
+                        .overScrollVertical(),
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        bottom = padding.calculateBottomPadding()
+                    )
+                ) {
+                    if (!uiState.isLoading && uiState.modules.isEmpty()) {
+                        item {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                BasicComponent(
+                                    title = "暂未发现歌词提供者",
+                                    summary = "请点击右上角图标前往 LyricProvider 仓库下载安装并启用插件"
+                                )
+                            }
                         }
-                    }
+                    } else {
+                        groupedModules.forEach { category ->
+                            if (category.name.isNotBlank()) {
+                                item(key = "header_${category.name}") {
+                                    SmallTitle(
+                                        text = category.name,
+                                        insideMargin = PaddingValues(
+                                            start = 10.dp,
+                                            end = 10.dp,
+                                            top = 12.dp,
+                                            bottom = 4.dp
+                                        )
+                                    )
+                                }
+                            }
 
-                    items(category.items.size) { index ->
-                        val module = category.items[index]
-                        ModuleCard(module)
-                        Spacer(modifier = Modifier.height(12.dp))
+                            items(category.items.size) { index ->
+                                val module = category.items[index]
+                                ModuleCard(module)
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+                        }
                     }
                 }
             }
@@ -1061,5 +1075,4 @@ class HookSettingsActivity : ComponentActivity() {
             }
         }
     }
-
 }
