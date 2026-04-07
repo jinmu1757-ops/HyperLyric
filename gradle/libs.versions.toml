@@ -1,5 +1,5 @@
 [versions]
-agp = "9.0.1"
+agp = "9.1.0"
 coreKtx = "1.17.0"
 appcompat = "1.7.1"
 material = "1.13.0"
@@ -8,7 +8,7 @@ constraintlayout = "2.2.1"
 kotlinComposePlugin = "2.3.10"
 activityCompose = "1.12.4"
 composeBom = "2026.02.00"
-miuix = "0.8.8-ee05b131-SNAPSHOT"
+miuix = "0.9.0"
 palette = "1.0.0"
 haze = "1.7.2"
 kotlin = "2.3.0"
@@ -16,7 +16,9 @@ retrofit = "2.11.0"
 okhttp = "4.12.0"
 kotlinxSerializationJson = "1.6.3"
 retrofitSerializationConverter = "1.0.0"
-ksp = "2.3.1"
+libxposed = "101.0.0"
+daimajia-animations = "2.4"
+daimajia-easing = "2.4"
 
 
 [libraries]
@@ -52,6 +54,14 @@ squareup-okhttp3 = { group = "com.squareup.okhttp3", name = "okhttp", version.re
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 retrofit2-kotlinx-serialization-converter = { group = "com.jakewharton.retrofit", name = "retrofit2-kotlinx-serialization-converter", version.ref = "retrofitSerializationConverter" }
 
+# --- Xposed ---
+libxposed-api = { group = "io.github.libxposed", name = "api", version.ref = "libxposed" }
+libxposed-service = { group = "io.github.libxposed", name = "service", version.ref = "libxposed" }
+
+# --- 动画库 (YoYo) ---
+daimajia-animations = { group = "com.daimajia.androidanimations", name = "library", version.ref = "daimajia-animations" }
+daimajia-easing = { group = "com.daimajia.easing", name = "library", version.ref = "daimajia-easing" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlinComposePlugin" }
@@ -59,4 +69,3 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

@@ -609,13 +609,13 @@ object CoverThemeGradientExtractor {
 
         val lightStops = floatArrayOf(
             (baseLight - 0.07f).coerceIn(0f, 1f),
-            baseLight.toFloat(),
+            baseLight,
             (baseLight + 0.07f).coerceIn(0f, 1f)
         )
 
         val darkStops = floatArrayOf(
             (baseDark - 0.06f).coerceIn(0f, 1f),
-            baseDark.toFloat(),
+            baseDark,
             (baseDark + 0.06f).coerceIn(0f, 1f)
         )
 

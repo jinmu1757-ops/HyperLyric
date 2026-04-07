@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.lidesheng.hyperlyric"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.lidesheng.hyperlyric"
         minSdk = 31
@@ -68,8 +68,8 @@ dependencies {
     implementation(libs.androidx.palette.ktx)
 
     // libxposed API
-    compileOnly("io.github.libxposed:api:101.0.0")
-    implementation("io.github.libxposed:service:101.0.0")
+    compileOnly(libs.libxposed.api)
+    implementation(libs.libxposed.service)
 
     // --- 布局兼容 ---
     implementation(libs.androidx.constraintlayout)
@@ -104,6 +104,6 @@ dependencies {
     implementation(libs.retrofit2.kotlinx.serialization.converter)
 
     // --- 动画库 (YoYo) ---
-    implementation("com.daimajia.androidanimations:library:2.4@aar")
-    implementation("com.daimajia.easing:library:2.4@aar")
+    implementation(libs.daimajia.animations) { artifact { type = "aar" } }
+    implementation(libs.daimajia.easing) { artifact { type = "aar" } }
 }
