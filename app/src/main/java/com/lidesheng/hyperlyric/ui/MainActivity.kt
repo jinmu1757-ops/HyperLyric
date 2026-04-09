@@ -91,6 +91,15 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.window.WindowBottomSheet
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -156,6 +165,15 @@ fun MainScreen() {
     var floatingNavBarEnabled by remember { mutableStateOf(prefs.getBoolean(Constants.KEY_FLOATING_NAV_BAR, Constants.DEFAULT_FLOATING_NAV_BAR)) }
     var enableSuperIsland by remember { mutableStateOf(prefs.getBoolean(Constants.KEY_ENABLE_SUPER_ISLAND, Constants.DEFAULT_ENABLE_SUPER_ISLAND)) }
     var enableDynamicIsland by remember { mutableStateOf(prefs.getBoolean(Constants.KEY_ENABLE_DYNAMIC_ISLAND, Constants.DEFAULT_ENABLE_DYNAMIC_ISLAND)) }
+
+    var showPermissionSheet by remember { mutableStateOf(false) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            val message = if (isGranted) "已获取通知权限" else "未获取通知权限"
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    )
 
     val listener = remember {
         SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
@@ -338,14 +356,35 @@ fun MainScreen() {
                                         title = "灵动岛歌词通知",
                                         summary = "适用于无root设备",
                                         checked = enableDynamicIsland,
-                                        onCheckedChange = {
-                                            enableDynamicIsland = it
-                                            prefs.edit { putBoolean(Constants.KEY_ENABLE_DYNAMIC_ISLAND, it) }
-                                            ConfigSync.syncPreference(Constants.PREF_NAME, Constants.KEY_ENABLE_DYNAMIC_ISLAND, it)
-                                            val intent = Intent(context, com.lidesheng.hyperlyric.service.ForegroundLyricService::class.java).apply {
-                                                action = if (it) com.lidesheng.hyperlyric.service.LyricTileService.ACTION_RESUME_TOGGLED else com.lidesheng.hyperlyric.service.LyricTileService.ACTION_PAUSE_TOGGLED
+                                        onCheckedChange = { isChecked ->
+                                            if (isChecked) {
+                                                val hasPostNotification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                                } else {
+                                                    true
+                                                }
+                                                val hasListenerPermission = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+
+                                                if (hasPostNotification && hasListenerPermission) {
+                                                    enableDynamicIsland = true
+                                                    prefs.edit { putBoolean(Constants.KEY_ENABLE_DYNAMIC_ISLAND, true) }
+                                                    ConfigSync.syncPreference(Constants.PREF_NAME, Constants.KEY_ENABLE_DYNAMIC_ISLAND, true)
+                                                    val intent = Intent(context, com.lidesheng.hyperlyric.service.ForegroundLyricService::class.java).apply {
+                                                        action = com.lidesheng.hyperlyric.service.LyricTileService.ACTION_RESUME_TOGGLED
+                                                    }
+                                                    context.startService(intent)
+                                                } else {
+                                                    showPermissionSheet = true
+                                                }
+                                            } else {
+                                                enableDynamicIsland = false
+                                                prefs.edit { putBoolean(Constants.KEY_ENABLE_DYNAMIC_ISLAND, false) }
+                                                ConfigSync.syncPreference(Constants.PREF_NAME, Constants.KEY_ENABLE_DYNAMIC_ISLAND, false)
+                                                val intent = Intent(context, com.lidesheng.hyperlyric.service.ForegroundLyricService::class.java).apply {
+                                                    action = com.lidesheng.hyperlyric.service.LyricTileService.ACTION_PAUSE_TOGGLED
+                                                }
+                                                context.startService(intent)
                                             }
-                                            context.startService(intent)
                                         }
                                     )
                                     AnimatedVisibility(visible = enableDynamicIsland) {
@@ -427,6 +466,83 @@ fun MainScreen() {
                         AboutContent(modifier = Modifier.fillMaxWidth())
                     }
                 }
+            }
+        }
+    }
+
+    WindowBottomSheet(
+        show = showPermissionSheet,
+        title = "通知权限",
+        allowDismiss = false,
+        startAction = {
+            IconButton(onClick = { showPermissionSheet = false }) {
+                Icon(
+                    imageVector = MiuixIcons.Close,
+                    contentDescription = "Close",
+                    tint = MiuixTheme.colorScheme.onBackground
+                )
+            }
+        },
+        endAction = {
+            IconButton(onClick = {
+                val hasPostNotification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } else {
+                    true
+                }
+                val hasListenerPermission = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+                if (hasPostNotification && hasListenerPermission) {
+                    showPermissionSheet = false
+                    enableDynamicIsland = true
+                    prefs.edit { putBoolean(Constants.KEY_ENABLE_DYNAMIC_ISLAND, true) }
+                    ConfigSync.syncPreference(Constants.PREF_NAME, Constants.KEY_ENABLE_DYNAMIC_ISLAND, true)
+                    val intent = Intent(context, com.lidesheng.hyperlyric.service.ForegroundLyricService::class.java).apply {
+                        action = com.lidesheng.hyperlyric.service.LyricTileService.ACTION_RESUME_TOGGLED
+                    }
+                    context.startService(intent)
+                } else {
+                    Toast.makeText(context, "权限还未授予", Toast.LENGTH_SHORT).show()
+                }
+            }) {
+                Icon(
+                    imageVector = MiuixIcons.Ok,
+                    contentDescription = "OK",
+                    tint = MiuixTheme.colorScheme.onBackground
+                )
+            }
+        },
+        onDismissRequest = {
+            showPermissionSheet = false
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()
+            ) {
+                ArrowPreference(
+                    title = "发送歌词通知权限",
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            Toast.makeText(context, "Android 13 以下无需申请此权限", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+                ArrowPreference(
+                    title = "获取歌词信息权限",
+                    onClick = {
+                        try {
+                            val intent = Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            Toast.makeText(context, "无法打开通知使用权设置", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
             }
         }
     }

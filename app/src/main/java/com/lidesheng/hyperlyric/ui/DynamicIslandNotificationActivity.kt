@@ -1,18 +1,14 @@
 package com.lidesheng.hyperlyric.ui
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,13 +25,13 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -43,16 +39,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import androidx.compose.runtime.collectAsState
 import com.lidesheng.hyperlyric.Constants
-import com.lidesheng.hyperlyric.service.ForegroundLyricService
 import com.lidesheng.hyperlyric.online.model.DynamicLyricData
+import com.lidesheng.hyperlyric.service.ForegroundLyricService
 import com.lidesheng.hyperlyric.utils.ThemeUtils
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -66,16 +62,16 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import top.yukonga.miuix.kmp.window.WindowDialog
 
 val commonMusicApps = mapOf(
     "com.salt.music" to "Salt Player",
@@ -156,13 +152,7 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
 
 
 
-        val notificationPermissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission(),
-            onResult = { isGranted ->
-                val message = if (isGranted) "已获取通知权限" else "未获取通知权限"
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            }
-        )
+
 
         Scaffold(
             topBar = {
@@ -341,38 +331,7 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
                             ) {
                                 item {
                                     Column {
-                                        SmallTitle(
-                                            text = "通知权限",
-                                            insideMargin = PaddingValues(10.dp, 4.dp)
-                                        )
-                                        Card(modifier = Modifier.fillMaxWidth()) {
-                                            Column {
-                                                ArrowPreference(
-                                                    title = "发送歌词通知权限",
-                                                    summary = "要与\u201c获取歌词信息权限\u201d同时开启使用",
-                                                    onClick = {
-                                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                                        } else {
-                                                            Toast.makeText(context, "Android 13 以下无需申请此权限", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                )
-                                                ArrowPreference(
-                                                    title = "获取歌词信息权限",
-                                                    onClick = {
-                                                        try {
-                                                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                                            context.startActivity(intent)
-                                                        } catch (_: Exception) {
-                                                            Toast.makeText(context, "无法打开通知使用权设置", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    }
-                                                )
-
-                                            }
-                                        }
-
+                                        // Permission UI moved to MainActivity
                                         SmallTitle(
                                             text = "通知管理",
                                             insideMargin = PaddingValues(10.dp, 4.dp)
