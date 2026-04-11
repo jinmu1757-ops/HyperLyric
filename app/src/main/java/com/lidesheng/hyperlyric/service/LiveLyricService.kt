@@ -178,10 +178,10 @@ class LiveLyricService : NotificationListenerService() {
             syncToGlobalData(playingController)
         }
         override fun onPlaybackStateChanged(state: PlaybackState?) {
-            try {
-                val componentName = ComponentName(this@LiveLyricService, LiveLyricService::class.java)
-                updateCurrentController(mediaSessionManager.getActiveSessions(componentName))
-            } catch (_: Exception) {}
+            val playingController = currentControllers.find {
+                it.playbackState?.state == PlaybackState.STATE_PLAYING
+            } ?: currentControllers.firstOrNull()
+            syncToGlobalData(playingController)
         }
         override fun onSessionDestroyed() {
             try {

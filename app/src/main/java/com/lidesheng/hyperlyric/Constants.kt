@@ -32,7 +32,6 @@ object Constants {
     const val KEY_ONLINE_LYRIC_ENABLED = "key_online_lyric_enabled"
     const val KEY_ONLINE_LYRIC_CACHE_LIMIT = "key_online_lyric_cache_limit"
     const val KEY_DISABLE_LYRIC_SPLIT = "key_disable_lyric_split"
-    const val KEY_PERSISTENT_FOREGROUND = "key_persistent_foreground"
 
     // Typography & Styling
     const val KEY_TEXT_SIZE = "key_text_size"

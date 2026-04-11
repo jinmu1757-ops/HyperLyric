@@ -40,9 +40,7 @@ class ForegroundLyricService : Service() {
     private var pauseDebounceJob: Job? = null
     private val pauseDebounceMs = 150L
 
-    private val isPersistentEnabled: Boolean
-        get() = getSharedPreferences(Constants.PREF_NAME, MODE_PRIVATE)
-            .getBoolean(Constants.KEY_PERSISTENT_FOREGROUND, false)
+
 
     private val playbackToggleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -67,11 +65,6 @@ class ForegroundLyricService : Service() {
         NotificationManagerHelper.createNotificationChannel(notificationManager)
         DynamicLyricData.initWhitelist(this)
 
-        if (isPersistentEnabled) {
-            switchToPersistentNotification()
-            ensureListenerBound()
-        }
-
         updateNotificationUI(DynamicLyricData.currentState, force = true)
 
         serviceScope.launch {
@@ -88,7 +81,7 @@ class ForegroundLyricService : Service() {
     private fun updateNotificationUI(globalState: LyricState, force: Boolean) {
         val isWhitelisted = DynamicLyricData.whitelistState.value.contains(globalState.targetPackageName)
         if (!isWhitelisted) {
-            if (isPersistentEnabled)  switchToPersistentNotification().also { lastUiState = null } else stopWithCleanup()
+            stopWithCleanup()
             return
         }
 
@@ -96,7 +89,7 @@ class ForegroundLyricService : Service() {
         if (!sp.getBoolean(Constants.KEY_ENABLE_DYNAMIC_ISLAND, Constants.DEFAULT_ENABLE_DYNAMIC_ISLAND)) {
             NotificationManagerHelper.cancelFocusNotification(notificationManager)
             NotificationManagerHelper.cancelNormalNotification(notificationManager)
-            if (isPersistentEnabled) switchToPersistentNotification().also { lastUiState = null } else stopWithCleanup()
+            stopWithCleanup()
             return
         }
 
@@ -142,7 +135,7 @@ class ForegroundLyricService : Service() {
             pauseDebounceJob = serviceScope.launch {
                 delay(pauseDebounceMs)
                 if (DynamicLyricData.currentState.isPlaying) return@launch
-                clearNotificationsAndCheckPersistent()
+                clearNotificationsAndStop()
             }
         }
     }
@@ -167,10 +160,10 @@ class ForegroundLyricService : Service() {
         stopSelf()
     }
 
-    private fun clearNotificationsAndCheckPersistent() {
+    private fun clearNotificationsAndStop() {
         NotificationManagerHelper.cancelFocusNotification(notificationManager)
         NotificationManagerHelper.cancelNormalNotification(notificationManager)
-        if (isPersistentEnabled) switchToPersistentNotification().also { lastUiState = null } else stopWithCleanup()
+        stopWithCleanup()
     }
 
     private fun dispatchNotifications(uiState: NotificationManagerHelper.UiState, duration: Long, isScreenOn: Boolean) {
@@ -215,17 +208,6 @@ class ForegroundLyricService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START_PERSISTENT -> {
-                switchToPersistentNotification()
-                ensureListenerBound()
-            }
-            ACTION_STOP_PERSISTENT -> {
-                if (!DynamicLyricData.currentState.isPlaying) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    isForeground = false
-                    stopSelf()
-                }
-            }
             LyricTileService.ACTION_PAUSE_TOGGLED -> {
                 updateNotificationUI(DynamicLyricData.currentState, force = true)
             }
@@ -236,36 +218,20 @@ class ForegroundLyricService : Service() {
         return START_STICKY
     }
 
-    private fun switchToPersistentNotification() {
-        val notification = NotificationManagerHelper.buildPersistentNotification(this)
-        startForeground(NotificationManagerHelper.PERSISTENT_NOTIFICATION_ID, notification)
-        isForeground = true
-    }
-
-    private fun ensureListenerBound() {
-        try {
-            val pm = packageManager
-            val cn = ComponentName(this, LiveLyricService::class.java)
-            pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP)
-            pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP)
-            android.service.notification.NotificationListenerService.requestRebind(cn)
-        } catch (_: Exception) { }
-    }
-
     companion object {
-        private const val ACTION_START_PERSISTENT = "com.lidesheng.hyperlyric.START_PERSISTENT"
-        private const val ACTION_STOP_PERSISTENT = "com.lidesheng.hyperlyric.STOP_PERSISTENT"
-
-        fun startPersistent(context: Context) {
-            val intent = Intent(context, ForegroundLyricService::class.java)
-            intent.action = ACTION_START_PERSISTENT
-            context.startForegroundService(intent)
-        }
-
-        fun stopPersistent(context: Context) {
-            val intent = Intent(context, ForegroundLyricService::class.java)
-            intent.action = ACTION_STOP_PERSISTENT
-            context.startService(intent)
+        /**
+         * 静默重连 NotificationListenerService。
+         * 通过先禁用再启用组件，触发系统重新绑定监听服务。
+         * 用于解决杀后台后监听器假死的问题。
+         */
+        fun ensureListenerBound(context: Context) {
+            try {
+                val pm = context.packageManager
+                val cn = ComponentName(context, LiveLyricService::class.java)
+                pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP)
+                pm.setComponentEnabledSetting(cn, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP)
+                android.service.notification.NotificationListenerService.requestRebind(cn)
+            } catch (_: Exception) { }
         }
     }
 }

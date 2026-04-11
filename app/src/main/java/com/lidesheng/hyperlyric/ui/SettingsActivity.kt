@@ -117,7 +117,7 @@ class SettingsActivity : ComponentActivity() {
                     val value = config.get(key)
 
                     // 过滤已废弃的键值对，避免老备份产生脏数据
-                    if (key == "key_send_normal_notification" || key == "key_send_focus_notification") {
+                    if (key == "key_send_normal_notification" || key == "key_send_focus_notification" || key == "key_persistent_foreground") {
                         continue
                     }
 

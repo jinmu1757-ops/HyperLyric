@@ -15,10 +15,8 @@ import androidx.core.app.NotificationCompat
 object NotificationManagerHelper {
     private const val CHANNEL_ID = "hyper_lyric_live_v4"
     private const val CHANNEL_ID_FOCUS = "hyper_lyric_focus_v1"
-    private const val CHANNEL_ID_PERSISTENT = "hyper_lyric_persistent_v1"
     const val NORMAL_NOTIFICATION_ID = 2002
     const val FOCUS_NOTIFICATION_ID = 2003
-    const val PERSISTENT_NOTIFICATION_ID = 2005
 
     data class UiState(
         val title: String,
@@ -87,47 +85,8 @@ object NotificationManagerHelper {
             }
             notificationManager.createNotificationChannel(focusChannel)
         }
-
-        if (notificationManager.getNotificationChannel(CHANNEL_ID_PERSISTENT) == null) {
-            val persistentChannel = NotificationChannel(
-                CHANNEL_ID_PERSISTENT,
-                "前台服务",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                setSound(null, null)
-                setShowBadge(false)
-                enableVibration(false)
-            }
-            notificationManager.createNotificationChannel(persistentChannel)
-        }
     }
 
-    fun buildPersistentNotification(context: Context): Notification {
-        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?:
-            Intent(context, com.lidesheng.hyperlyric.ui.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-        
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            1,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        return NotificationCompat.Builder(context, CHANNEL_ID_PERSISTENT)
-            .setSmallIcon(R.drawable.lyrictile)
-            .setContentTitle("HyperLyric运行中")
-            .setContentText("点按通知以打开应用")
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setContentIntent(pendingIntent)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
-    }
 
     fun buildNormalNotification(
         context: Context,
@@ -272,19 +231,7 @@ object NotificationManagerHelper {
         return builder.build()
     }
 
-    fun buildAndSendFocusNotification(
-        context: Context,
-        notificationManager: NotificationManager,
-        uiState: UiState,
-        showProgress: Boolean = true
-    ) {
-        val notification = buildFocusNotification(context, uiState, showProgress)
-        try {
-            notificationManager.notify(FOCUS_NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
+
 
     fun cancelFocusNotification(notificationManager: NotificationManager) {
         try {

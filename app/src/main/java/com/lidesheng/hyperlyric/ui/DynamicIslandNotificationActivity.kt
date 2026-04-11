@@ -41,7 +41,6 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import com.lidesheng.hyperlyric.Constants
 import com.lidesheng.hyperlyric.online.model.DynamicLyricData
-import com.lidesheng.hyperlyric.service.ForegroundLyricService
 import com.lidesheng.hyperlyric.utils.ThemeUtils
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -120,10 +119,6 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
             backgroundColor = MiuixTheme.colorScheme.surface,
             tint = HazeTint(MiuixTheme.colorScheme.surface.copy(0.8f))
         )
-
-        var persistentEnabled by remember {
-            mutableStateOf(prefs.getBoolean(Constants.KEY_PERSISTENT_FOREGROUND, false))
-        }
 
         var onlineLyricEnabled by remember {
             mutableStateOf(prefs.getBoolean(Constants.KEY_ONLINE_LYRIC_ENABLED, Constants.DEFAULT_ONLINE_LYRIC_ENABLED))
@@ -503,25 +498,6 @@ class DynamicIslandNotificationActivity : ComponentActivity() {
                                                             } catch (_: Exception) {
                                                                 Toast.makeText(context, "无法打开电池优化设置", Toast.LENGTH_SHORT).show()
                                                             }
-                                                        }
-                                                    }
-                                                )
-                                                SwitchPreference(
-                                                    title = "保持后台运行",
-                                                    summary = "如果没有通知发送，可手动开关一遍该功能强行唤醒服务",
-                                                    checked = persistentEnabled,
-                                                    onCheckedChange = { checked ->
-                                                        persistentEnabled = checked
-                                                        prefs.edit {
-                                                            putBoolean(
-                                                                Constants.KEY_PERSISTENT_FOREGROUND,
-                                                                checked
-                                                            )
-                                                        }
-                                                        if (checked) {
-                                                            ForegroundLyricService.startPersistent(context)
-                                                        } else {
-                                                            ForegroundLyricService.stopPersistent(context)
                                                         }
                                                     }
                                                 )
