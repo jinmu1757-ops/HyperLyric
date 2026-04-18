@@ -67,6 +67,8 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.hiddenapibypass)
+    implementation "dev.rikka.shizuku:api:13.1.0"
+
 
     // libxposed API
     compileOnly(libs.libxposed.api)
