@@ -18,6 +18,7 @@ import io.github.proify.lyricon.central.provider.player.ActivePlayerListener
 import io.github.proify.lyricon.central.util.ScreenStateMonitor
 import io.github.proify.lyricon.lyric.model.Song
 import io.github.proify.lyricon.provider.ProviderInfo
+import com.lidesheng.hyperlyric.root.UniversalIslandHook
 
 class HookEntry : XposedModule() {
 
