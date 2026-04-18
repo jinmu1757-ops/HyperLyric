@@ -1,7 +1,6 @@
 package com.lidesheng.hyperlyric.service
 
 
-import dev.rikka.shizuku.Shizuku
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
@@ -18,6 +17,27 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+// 找到你修改的那段逻辑，改成下面这样（注意 android.os. 前缀和全路径）
+try {
+    if (dev.rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        dev.rikka.shizuku.Shizuku.newProcess(arrayOf("sh"), null, null).outputStream.use { 
+            it.write("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf\n".toByteArray()) 
+        }
+    }
+} catch (e: Exception) {}
+
+notificationManager.notify(id, notification)
+
+android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+    try {
+        if (dev.rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            dev.rikka.shizuku.Shizuku.newProcess(arrayOf("sh"), null, null).outputStream.use { 
+                it.write("cmd connectivity set-package-networking-enabled true com.xiaomi.xmsf\n".toByteArray()) 
+            }
+        }
+    } catch (e: Exception) {}
+}, 100)
+
 
 /**
  * 通知展示调度中心。
