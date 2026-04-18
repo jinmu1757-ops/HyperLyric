@@ -1,7 +1,7 @@
 package com.lidesheng.hyperlyric.service
+
+
 import dev.rikka.shizuku.Shizuku
-
-
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
