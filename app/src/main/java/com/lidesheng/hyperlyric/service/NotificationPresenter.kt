@@ -168,7 +168,25 @@ class NotificationPresenter(
 
     private fun notifyWrapper(id: Int, notification: Notification) {
         try {
+// 1. 发通知前：执行禁用联网
+try {
+    if (dev.rikka.shizuku.Shizuku.checkSelfPermission() == 0) {
+        val process = dev.rikka.shizuku.Shizuku.newProcess(arrayOf("sh"), null, null)
+        process.outputStream.use { it.write("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf\n".toByteArray()) }
+    }
+} catch (e: Exception) {}
+            
             notificationManager.notify(id, notification)
+
+            // 3. 发通知后：延迟 100 毫秒执行恢复联网
+android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+    try {
+        if (dev.rikka.shizuku.Shizuku.checkSelfPermission() == 0) {
+            val process = dev.rikka.shizuku.Shizuku.newProcess(arrayOf("sh"), null, null)
+            process.outputStream.use { it.write("cmd connectivity set-package-networking-enabled true com.xiaomi.xmsf\n".toByteArray()) }
+        }
+    } catch (e: Exception) {}
+}, 100) // 这里的 100 就是 100 毫秒
         } catch (e: Exception) {
             e.printStackTrace()
         }
