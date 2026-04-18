@@ -26,6 +26,14 @@ object Constants {
     const val KEY_REMOVE_FOCUS_WHITELIST = "remove_focus_whitelist"
     const val KEY_REMOVE_ISLAND_WHITELIST = "remove_island_whitelist"
     const val KEY_NOTIFICATION_CLICK_ACTION = "key_notification_click_action"
+    const val KEY_ISLAND_CONTENT_LEFT = "key_island_content_left"
+    const val KEY_ISLAND_CONTENT_RIGHT = "key_island_content_right"
+    const val KEY_ISLAND_LEFT_PADDING_LEFT = "key_island_left_padding_left"
+    const val KEY_ISLAND_LEFT_PADDING_RIGHT = "key_island_left_padding_right"
+    const val KEY_ISLAND_RIGHT_PADDING_LEFT = "key_island_right_padding_left"
+    const val KEY_ISLAND_RIGHT_PADDING_RIGHT = "key_island_right_padding_right"
+    const val KEY_ISLAND_LEFT_CONTENT_MAX_WIDTH = "key_island_left_content_max_width"
+    const val KEY_ISLAND_RIGHT_CONTENT_MAX_WIDTH = "key_island_right_content_max_width"
     
     // Data & Parsing
     const val KEY_WHITELIST = "key_whitelist_packages"
@@ -81,6 +89,14 @@ object Constants {
     const val DEFAULT_REMOVE_FOCUS_WHITELIST = false
     const val DEFAULT_REMOVE_ISLAND_WHITELIST = false
     const val DEFAULT_NOTIFICATION_CLICK_ACTION = 0
+    const val DEFAULT_ISLAND_CONTENT_LEFT = 1
+    const val DEFAULT_ISLAND_CONTENT_RIGHT = 8
+    const val DEFAULT_ISLAND_LEFT_PADDING_LEFT = 0
+    const val DEFAULT_ISLAND_LEFT_PADDING_RIGHT = 0
+    const val DEFAULT_ISLAND_RIGHT_PADDING_LEFT = 0
+    const val DEFAULT_ISLAND_RIGHT_PADDING_RIGHT = 0
+    const val DEFAULT_ISLAND_LEFT_CONTENT_MAX_WIDTH = 80
+    const val DEFAULT_ISLAND_RIGHT_CONTENT_MAX_WIDTH = 80
 
     // Data Defaults
     const val DEFAULT_ONLINE_LYRIC_ENABLED = false
@@ -98,7 +114,6 @@ object Constants {
     const val DEFAULT_PROGRESS_COLOR_ENABLED = true
 
     // Animation & Marquee Defaults
-    const val DEFAULT_ANIM_MODE = 0
     const val DEFAULT_ANIM_ENABLE = false
     const val DEFAULT_ANIM_ID = "yoyo_default"
     const val DEFAULT_MARQUEE_MODE = true

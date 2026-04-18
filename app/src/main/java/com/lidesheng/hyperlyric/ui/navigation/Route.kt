@@ -9,6 +9,10 @@ sealed interface Route : NavKey {
     data object HookSettings : Route
     data object DynamicIslandNotification : Route
     data object Log : Route
+    data object LyricProvider : Route
+    data object LyricAnimation : Route
+    data object LyricSettings : Route
+    data object SuperIslandSettings : Route
     data object Licenses : Route
     data object Poetry : Route
 }

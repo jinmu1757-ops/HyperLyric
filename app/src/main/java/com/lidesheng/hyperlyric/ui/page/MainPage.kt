@@ -304,7 +304,7 @@ fun MainPage() {
                                 Column {
                                     SwitchPreference(
                                         title = "小米超级岛歌词",
-                                        summary = "仅支持已root的HyperOS3设备",
+                                        summary = "仅支持已安装lsposed的HyperOS3设备",
                                         checked = enableSuperIsland,
                                         onCheckedChange = {
                                             enableSuperIsland = it
@@ -321,16 +321,13 @@ fun MainPage() {
                                         )
                                     }
                                     SwitchPreference(
-                                        title = "灵动岛歌词通知",
-                                        summary = "适用于无root设备",
+                                        title = "通知型灵动岛歌词",
+                                        summary = "利用通知实现灵动岛歌词效果，适用于无root设备",
                                         checked = enableDynamicIsland,
                                         onCheckedChange = { isChecked ->
                                             if (isChecked) {
-                                                val hasPostNotification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                val hasPostNotification =
                                                     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                                } else {
-                                                    true
-                                                }
                                                 val hasListenerPermission = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 
                                                 if (hasPostNotification && hasListenerPermission) {
@@ -350,7 +347,7 @@ fun MainPage() {
                                     )
                                     AnimatedVisibility(visible = enableDynamicIsland) {
                                         ArrowPreference(
-                                            title = "灵动岛歌词通知自定义配置",
+                                            title = "通知型灵动岛歌词自定义配置",
                                             onClick = {
                                                 navigator.navigate(Route.DynamicIslandNotification)
                                             }
@@ -446,11 +443,8 @@ fun MainPage() {
         },
         endAction = {
             IconButton(onClick = {
-                val hasPostNotification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val hasPostNotification =
                     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                } else {
-                    true
-                }
                 val hasListenerPermission = NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
                 if (hasPostNotification && hasListenerPermission) {
                     showPermissionSheet = false
@@ -483,11 +477,7 @@ fun MainPage() {
                 ArrowPreference(
                     title = "发送歌词通知权限",
                     onClick = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            Toast.makeText(context, "Android 13 以下无需申请此权限", Toast.LENGTH_SHORT).show()
-                        }
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 )
                 ArrowPreference(
@@ -567,13 +557,13 @@ fun AboutContent(modifier: Modifier = Modifier) {
         }
 
         SmallTitle(
-            text = "使用提示",
+            text = "使用帮助",
             insideMargin = PaddingValues(10.dp, 4.dp)
         )
         Card(modifier = Modifier.fillMaxWidth()) {
             Column {
                 BasicComponent(title = "小米超级岛歌词模式", summary = "前往github下载对应歌词提供器并勾选推荐应用，重启系统界面和音乐软件后即可使用。")
-                BasicComponent(title = "灵动岛歌词通知模式", summary = "将音乐软件包名加入白名单，并在音乐软件里打开蓝牙歌词功能，连接蓝牙设备\n已支持 Salt Player，更多应用等你发现...")
+                BasicComponent(title = "通知型灵动岛歌词模式", summary = "将音乐软件包名加入白名单，并在音乐软件里打开蓝牙歌词功能，连接蓝牙设备\n已支持 Salt Player，更多应用等你发现...")
             }
         }
 

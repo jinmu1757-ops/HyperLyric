@@ -15,6 +15,10 @@ import com.lidesheng.hyperlyric.ui.page.LogPage
 import com.lidesheng.hyperlyric.ui.page.SettingsPage
 import com.lidesheng.hyperlyric.ui.page.PoetryPage
 import com.lidesheng.hyperlyric.ui.page.HookSettingsPage
+import com.lidesheng.hyperlyric.ui.page.hooksettings.LyricProviderPage
+import com.lidesheng.hyperlyric.ui.page.hooksettings.LyricAnimationPage
+import com.lidesheng.hyperlyric.ui.page.hooksettings.LyricSettingsPage
+import com.lidesheng.hyperlyric.ui.page.hooksettings.SuperIslandSettingsPage
 import com.lidesheng.hyperlyric.ui.page.DynamicIslandNotificationPage
 
 @Composable
@@ -35,6 +39,10 @@ fun AppNavigation(startRoute: Route) {
                 
                 entry<Route.Settings> { SettingsPage() }
                 entry<Route.HookSettings> { HookSettingsPage() }
+                entry<Route.LyricProvider> { LyricProviderPage() }
+                entry<Route.LyricAnimation> { LyricAnimationPage() }
+                entry<Route.LyricSettings> { LyricSettingsPage() }
+                entry<Route.SuperIslandSettings> { SuperIslandSettingsPage() }
                 entry<Route.DynamicIslandNotification> { DynamicIslandNotificationPage() }
                 entry<Route.Log> { LogPage() }
                 entry<Route.Licenses> { LicensesPage() }
