@@ -18,7 +18,6 @@ import io.github.proify.lyricon.central.provider.player.ActivePlayerListener
 import io.github.proify.lyricon.central.util.ScreenStateMonitor
 import io.github.proify.lyricon.lyric.model.Song
 import io.github.proify.lyricon.provider.ProviderInfo
-import com.lidesheng.hyperlyric.root.UniversalIslandHook
 
 class HookEntry : XposedModule() {
 
@@ -35,6 +34,142 @@ class HookEntry : XposedModule() {
             try {
                 UnlockIslandWhitelist.hook(this, param.defaultClassLoader)
                 UnlockFocusWhitelist.hook(this, param.defaultClassLoader)
+            } catch (e: Exception) {
+                 logError("Failed to hook white-lists", e)
+            }
+
+            val prefs = getRemotePreferences(Constants.PREF_NAME)
+            val isSuperIslandEnabled = prefs.getBoolean(Constants.KEY_ENABLE_SUPER_ISLAND, Constants.DEFAULT_ENABLE_SUPER_ISLAND)
+            if (!isSuperIslandEnabled) {
+                log("Super Island is disabled, skipping island hooks.")
+                return
+            }
+
+            // 劫持 Application.onCreate 以初始化 Lyricon Receiver 所需的环境
+            try {
+                val appClass = param.defaultClassLoader.loadClass("android.app.Application")
+                val onCreateMethod = appClass.getDeclaredMethod("onCreate")
+                deoptimize(onCreateMethod)
+                hook(onCreateMethod).intercept(AppCreateHooker())
+                log("Hooked Application.onCreate for com.android.systemui")
+            } catch (e: Exception) {
+                logError("Failed to hook Application.onCreate", e)
+            }
+
+            // 核心：拦截 ClassLoader 构造，以捕捉 miui.systemui.plugin 等动态加载的插件
+            try {
+                val clClass = Class.forName("dalvik.system.BaseDexClassLoader")
+                for (constructor in clClass.declaredConstructors) {
+                    deoptimize(constructor)
+                    hook(constructor).intercept(ClassLoaderHooker())
+                }
+                log("Hooked BaseDexClassLoader constructors successfully")
+            } catch (e: Exception) {
+                logError("Failed to hook ClassLoader constructors", e)
+            }
+
+        } else if (packageName == "miui.systemui.plugin") {
+            val prefs = getRemotePreferences(Constants.PREF_NAME)
+            val isSuperIslandEnabled = prefs.getBoolean(Constants.KEY_ENABLE_SUPER_ISLAND, Constants.DEFAULT_ENABLE_SUPER_ISLAND)
+            if (!isSuperIslandEnabled) {
+                log("Super Island is disabled, skipping plugin hook.")
+                return
+            }
+            log("miui.systemui.plugin package loaded directly, attempting hook...")
+            UniversalIslandHook.hook(this, param.defaultClassLoader)
+        }
+    }
+
+    /**
+     * 动态类加载器劫持
+     */
+    inner class ClassLoaderHooker : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val result = chain.proceed()
+            val cl = chain.thisObject as? ClassLoader ?: return result
+            UniversalIslandHook.hook(this@HookEntry, cl)
+            return result
+        }
+    }
+
+    /**
+     * Application 生命周期劫持
+     */
+    class AppCreateHooker : Hooker {
+        override fun intercept(chain: Chain): Any? {
+            val app = chain.thisObject as? android.app.Application
+            if (app != null) {
+                try {
+                    initializeLyricon(app)
+                    registerActivePlayerListener()
+                    registerRefreshReceiver(app)
+                    log("Lyricon environment initialized in SystemUI")
+                } catch (e: Exception) {
+                    logError("Receiver init failed", e)
+                }
+            }
+            return chain.proceed()
+        }
+
+        private fun initializeLyricon(app: android.app.Application) {
+            ScreenStateMonitor.initialize(app)
+            BridgeCentral.initialize(app)
+            BridgeCentral.sendBootCompleted()
+        }
+
+        private fun registerActivePlayerListener() {
+            ActivePlayerDispatcher.addActivePlayerListener(object : ActivePlayerListener {
+                override fun onActiveProviderChanged(providerInfo: ProviderInfo?) {
+                    LyriconDataBridge.clearAll()
+                    LyriconDataBridge.activePackageName = providerInfo?.playerPackageName
+                }
+
+                override fun onSongChanged(song: Song?) {
+                    LyriconDataBridge.updateSong(song)
+                    UniversalIslandHook.refreshActiveIsland()
+                }
+
+                override fun onPlaybackStateChanged(isPlaying: Boolean) {
+                    LyriconDataBridge.isPlaying = isPlaying
+                    UniversalIslandHook.onPlaybackStateChanged(isPlaying)
+                }
+
+                override fun onPositionChanged(position: Long) {
+                    val lyricChanged = LyriconDataBridge.updatePosition(position)
+                    if (lyricChanged) {
+                        UniversalIslandHook.updateLyricLine()
+                    }
+                    UniversalIslandHook.updatePosition(position)
+                }
+
+                override fun onSeekTo(position: Long) {}
+
+                override fun onSendText(text: String?) {
+                    LyriconDataBridge.updateLyric(text)
+                    UniversalIslandHook.updateLyricLine()
+                }
+
+                override fun onDisplayTranslationChanged(isDisplayTranslation: Boolean) {
+                    LyriconDataBridge.isDisplayTranslation = isDisplayTranslation
+                    UniversalIslandHook.refreshActiveIsland()
+                }
+
+                override fun onDisplayRomaChanged(displayRoma: Boolean) {}
+            })
+        }
+
+        private fun registerRefreshReceiver(app: android.app.Application) {
+            val filter = IntentFilter("com.lidesheng.hyperlyric.REFRESH_ISLAND")
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    log("Received REFRESH_ISLAND broadcast, refreshing island...")
+                    UniversalIslandHook.refreshActiveIsland()
+                }
+            }
+            app.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+        }
+    }
+}                UnlockFocusWhitelist.hook(this, param.defaultClassLoader)
             } catch (e: Exception) {
                  logError("Failed to hook white-lists", e)
             }
